@@ -307,6 +307,72 @@ HTML_TEMPLATE = '''
             100% { transform: translateX(100%); }
         }
 
+        .site-blocking-controls {
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+
+        .site-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .site-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: var(--card-light);
+            color: var(--text-light);
+        }
+
+        .dark-mode .site-input {
+            background: var(--card-dark);
+            border-color: #475569;
+            color: var(--text-dark);
+        }
+
+        .site-block-button {
+            padding: 8px 16px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .site-block-button:hover {
+            filter: brightness(1.1);
+        }
+
+        .blocked-sites-list {
+            margin-top: 5px;
+            font-size: 0.9rem;
+        }
+
+        .blocked-site {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 8px;
+            margin: 4px 0;
+            background: rgba(203, 213, 225, 0.1);
+            border-radius: 4px;
+        }
+
+        .blocked-site button {
+            padding: 2px 8px;
+            border: none;
+            background: var(--danger-color);
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
         @media (max-width: 768px) {
             .container { padding: 10px; }
             .device-grid { grid-template-columns: 1fr; }
@@ -318,6 +384,12 @@ HTML_TEMPLATE = '''
             .theme-toggle {
                 width: 100%;
                 margin-top: 10px;
+            }
+            .site-input-group {
+                flex-direction: column;
+            }
+            .site-block-button {
+                width: 100%;
             }
         }
     </style>
@@ -413,6 +485,16 @@ HTML_TEMPLATE = '''
                                     <span class="info-label">IP Address</span>
                                     <span class="info-value">${device.ip}</span>
                                 </div>
+                                <div class="info-row">
+                                    <span class="info-label">Blocked Sites</span>
+                                    <div class="blocked-sites-list" id="blocked-sites-${device.mac}">Loading...</div>
+                                </div>
+                            </div>
+                            <div class="site-blocking-controls">
+                                <div class="site-input-group">
+                                    <input type="text" id="site-input-${device.mac}" placeholder="Enter site to block (e.g., facebook.com)" class="site-input">
+                                    <button onclick="blockSite('${device.mac}')" class="site-block-button">Block Site</button>
+                                </div>
                             </div>
                             <button 
                                 class="toggle-button" 
@@ -460,9 +542,106 @@ HTML_TEMPLATE = '''
             });
         }
 
+        function loadBlockedSites(mac) {
+            fetch(`/api/blocked-sites/${mac}`)
+                .then(response => response.json())
+                .then(sites => {
+                    const blockedSitesList = document.getElementById(`blocked-sites-${mac}`);
+                    if (sites.length === 0) {
+                        blockedSitesList.innerHTML = '<em>No blocked sites</em>';
+                    } else {
+                        blockedSitesList.innerHTML = sites.map(site => `
+                            <div class="blocked-site">
+                                <span>${site}</span>
+                                <button onclick="unblockSite('${mac}', '${site}')">Unblock</button>
+                            </div>
+                        `).join('');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('Failed to load blocked sites', true);
+                });
+        }
+
+        function blockSite(mac) {
+            const input = document.getElementById(`site-input-${mac}`);
+            const site = input.value.trim().toLowerCase();
+            
+            if (!site) {
+                showToast('Please enter a site to block', true);
+                return;
+            }
+
+            toggleLoading(true);
+            fetch('/api/block-site', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ mac, site })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    input.value = '';
+                    loadBlockedSites(mac);
+                    showToast(`Successfully blocked ${site}`);
+                } else {
+                    showToast('Failed to block site', true);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('An error occurred', true);
+            })
+            .finally(() => {
+                toggleLoading(false);
+            });
+        }
+
+        function unblockSite(mac, site) {
+            toggleLoading(true);
+            fetch('/api/unblock-site', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ mac, site })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadBlockedSites(mac);
+                    showToast(`Successfully unblocked ${site}`);
+                } else {
+                    showToast('Failed to unblock site', true);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('An error occurred', true);
+            })
+            .finally(() => {
+                toggleLoading(false);
+            });
+        }
+
         // Initial update and set interval
         updateDeviceList();
         setInterval(updateDeviceList, 5000);
+
+        // Load blocked sites for each device when updating device list
+        const originalUpdateDeviceList = updateDeviceList;
+        updateDeviceList = function() {
+            originalUpdateDeviceList();
+            setTimeout(() => {
+                document.querySelectorAll('[id^="blocked-sites-"]').forEach(element => {
+                    const mac = element.id.replace('blocked-sites-', '');
+                    loadBlockedSites(mac);
+                });
+            }, 100);
+        };
     </script>
 </body>
 </html>
@@ -470,7 +649,9 @@ HTML_TEMPLATE = '''
 class HotspotManager:
     def __init__(self):
         self.devices_file = "devices.json"
+        self.blocked_sites_file = "blocked_sites.json"
         self.load_devices()
+        self.load_blocked_sites()
 
     def load_devices(self):
         try:
@@ -482,6 +663,69 @@ class HotspotManager:
     def save_devices(self):
         with open(self.devices_file, 'w') as f:
             json.dump(self.devices, f)
+
+    def load_blocked_sites(self):
+        try:
+            with open(self.blocked_sites_file, 'r') as f:
+                self.blocked_sites = json.load(f)
+        except FileNotFoundError:
+            self.blocked_sites = {}  # mac -> list of blocked sites
+
+    def save_blocked_sites(self):
+        with open(self.blocked_sites_file, 'w') as f:
+            json.dump(self.blocked_sites, f)
+
+    def block_site(self, mac, site):
+        mac = mac.upper()
+        site = site.lower()  # Normalize site to lowercase
+        
+        # Basic URL validation
+        if not re.match(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$', site):
+            return False
+
+        if mac not in self.blocked_sites:
+            self.blocked_sites[mac] = []
+        
+        if site not in self.blocked_sites[mac]:
+            # Handle both www and non-www versions
+            self.blocked_sites[mac].append(site)
+            try:
+                # Block DNS resolution for the site
+                subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
+                subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
+                
+                # Block HTTP/HTTPS traffic to the site's IP
+                subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site}" --algo bm --to 65535 -j DROP'])
+                
+                self.save_blocked_sites()
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"Error executing iptables command: {e}")
+                return False
+        return True
+
+    def unblock_site(self, mac, site):
+        mac = mac.upper()
+        if mac in self.blocked_sites and site in self.blocked_sites[mac]:
+            self.blocked_sites[mac].remove(site)
+            try:
+                # Remove DNS blocking rules
+                subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
+                subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
+                
+                # Remove HTTP/HTTPS blocking rules
+                subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site}" --algo bm --to 65535 -j DROP'])
+                
+                self.save_blocked_sites()
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"Error executing iptables command: {e}")
+                return False
+        return True
+
+    def get_blocked_sites(self, mac):
+        mac = mac.upper()
+        return self.blocked_sites.get(mac, [])
 
     def get_connected_devices(self):
         try:
@@ -581,7 +825,31 @@ def toggle_device():
         return jsonify({'success': success})
     return jsonify({'success': False, 'error': 'No MAC address provided'})
 
+@app.route('/api/block-site', methods=['POST'])
+def block_site():
+    data = request.get_json()
+    mac = data.get('mac')
+    site = data.get('site')
+    if mac and site:
+        success = hotspot_manager.block_site(mac, site)
+        return jsonify({'success': success})
+    return jsonify({'success': False, 'error': 'MAC address and site required'})
+
+@app.route('/api/unblock-site', methods=['POST'])
+def unblock_site():
+    data = request.get_json()
+    mac = data.get('mac')
+    site = data.get('site')
+    if mac and site:
+        success = hotspot_manager.unblock_site(mac, site)
+        return jsonify({'success': success})
+    return jsonify({'success': False, 'error': 'MAC address and site required'})
+
+@app.route('/api/blocked-sites/<mac>')
+def get_blocked_sites(mac):
+    sites = hotspot_manager.get_blocked_sites(mac)
+    return jsonify(sites)
+
 if __name__ == '__main__':
     # Run the Flask app on port 8080
     app.run(host='0.0.0.0', port=8080, debug=True)
-
