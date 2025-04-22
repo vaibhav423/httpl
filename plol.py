@@ -585,8 +585,11 @@ HTML_TEMPLATE = '''
             .then(data => {
                 if (data.success) {
                     input.value = '';
-                    loadBlockedSites(mac);
                     showToast(`Successfully blocked ${site}`);
+                    // Add delay before refreshing the list to ensure backend has processed the change
+                    setTimeout(() => {
+                        updateBlockedSitesList(mac);
+                    }, 500);
                 } else {
                     showToast('Failed to block site', true);
                 }
@@ -612,8 +615,11 @@ HTML_TEMPLATE = '''
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    loadBlockedSites(mac);
                     showToast(`Successfully unblocked ${site}`);
+                    // Add delay before refreshing the list to ensure backend has processed the change
+                    setTimeout(() => {
+                        updateBlockedSitesList(mac);
+                    }, 500);
                 } else {
                     showToast('Failed to unblock site', true);
                 }
@@ -627,21 +633,86 @@ HTML_TEMPLATE = '''
             });
         }
 
-        // Initial update and set interval
-        updateDeviceList();
-        setInterval(updateDeviceList, 5000);
+        // Cache for blocked sites to prevent UI flicker
+        const blockedSitesCache = new Map();
 
-        // Load blocked sites for each device when updating device list
+        // Function to update blocked sites without clearing existing content
+        function updateBlockedSitesList(mac) {
+            const element = document.getElementById(`blocked-sites-${mac}`);
+            if (!element) return;
+
+            fetch(`/api/blocked-sites/${mac}`)
+                .then(response => response.json())
+                .then(sites => {
+                    // Update cache
+                    blockedSitesCache.set(mac, sites);
+                    
+                    if (sites.length === 0) {
+                        element.innerHTML = '<em>No blocked sites</em>';
+                    } else {
+                        element.innerHTML = sites.map(site => `
+                            <div class="blocked-site">
+                                <span>${site}</span>
+                                <button onclick="unblockSite('${mac}', '${site}')">Unblock</button>
+                            </div>
+                        `).join('');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // Keep existing content on error
+                });
+        }
+
+        // Function to restore blocked sites from cache
+        function restoreBlockedSites(mac) {
+            const sites = blockedSitesCache.get(mac);
+            const element = document.getElementById(`blocked-sites-${mac}`);
+            if (sites && element) {
+                if (sites.length === 0) {
+                    element.innerHTML = '<em>No blocked sites</em>';
+                } else {
+                    element.innerHTML = sites.map(site => `
+                        <div class="blocked-site">
+                            <span>${site}</span>
+                            <button onclick="unblockSite('${mac}', '${site}')">Unblock</button>
+                        </div>
+                    `).join('');
+                }
+            }
+        }
+
+        // Modified updateDeviceList to preserve blocked sites state
         const originalUpdateDeviceList = updateDeviceList;
         updateDeviceList = function() {
+            const previousDevices = new Set(
+                Array.from(document.querySelectorAll('[id^="blocked-sites-"]'))
+                    .map(el => el.id.replace('blocked-sites-', ''))
+            );
+
             originalUpdateDeviceList();
+
+            // Restore blocked sites from cache after DOM update
             setTimeout(() => {
                 document.querySelectorAll('[id^="blocked-sites-"]').forEach(element => {
                     const mac = element.id.replace('blocked-sites-', '');
-                    loadBlockedSites(mac);
+                    if (!previousDevices.has(mac)) {
+                        updateBlockedSitesList(mac);
+                    } else {
+                        restoreBlockedSites(mac);
+                    }
                 });
             }, 100);
         };
+
+        // Replace loadBlockedSites with updateBlockedSitesList
+        function loadBlockedSites(mac) {
+            updateBlockedSitesList(mac);
+        }
+
+        // Initial update and less frequent interval
+        updateDeviceList();
+        setInterval(updateDeviceList, 60000); // Update every 60 seconds for better stability
     </script>
 </body>
 </html>
@@ -677,7 +748,7 @@ class HotspotManager:
 
     def block_site(self, mac, site):
         mac = mac.upper()
-        site = site.lower()  # Normalize site to lowercase
+        site = site.lower().strip()  # Normalize site to lowercase and remove whitespace
         
         # Basic URL validation
         if not re.match(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$', site):
@@ -687,15 +758,17 @@ class HotspotManager:
             self.blocked_sites[mac] = []
         
         if site not in self.blocked_sites[mac]:
-            # Handle both www and non-www versions
             self.blocked_sites[mac].append(site)
             try:
-                # Block DNS resolution for the site
-                subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
-                subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
-                
-                # Block HTTP/HTTPS traffic to the site's IP
-                subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site}" --algo bm --to 65535 -j DROP'])
+                # Block both www and non-www variants
+                for prefix in ['', 'www.']:
+                    site_variant = f"{prefix}{site}"
+                    # Block DNS resolution
+                    subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
+                    subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
+                    
+                    # Block HTTP/HTTPS traffic
+                    subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site_variant}" --algo bm -j DROP'])
                 
                 self.save_blocked_sites()
                 return True
@@ -706,15 +779,20 @@ class HotspotManager:
 
     def unblock_site(self, mac, site):
         mac = mac.upper()
+        site = site.lower().strip()  # Normalize site to lowercase and remove whitespace
+        
         if mac in self.blocked_sites and site in self.blocked_sites[mac]:
             self.blocked_sites[mac].remove(site)
             try:
-                # Remove DNS blocking rules
-                subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
-                subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site}" --algo bm -j DROP'])
-                
-                # Remove HTTP/HTTPS blocking rules
-                subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site}" --algo bm --to 65535 -j DROP'])
+                # Remove both www and non-www variants
+                for prefix in ['', 'www.']:
+                    site_variant = f"{prefix}{site}"
+                    # Remove DNS blocking rules
+                    subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
+                    subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
+                    
+                    # Remove HTTP/HTTPS blocking rules
+                    subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site_variant}" --algo bm -j DROP'])
                 
                 self.save_blocked_sites()
                 return True
