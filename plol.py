@@ -8,8 +8,8 @@ import atexit
 import signal
 import sys
 
-# Initialize with current timestamp and user info
-CURRENT_DATETIME = "2025-04-22 14:13:24"  # Current UTC time in YYYY-MM-DD HH:MM:SS format
+# Initialize timestamp and user info
+TIMESTAMP = "2025-04-22 14:11:26"
 CURRENT_USER = "vaibhav423"
 
 app = Flask(__name__)
@@ -20,7 +20,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Device Manager</title>
+    <title>Network Manager</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -76,39 +76,22 @@ HTML_TEMPLATE = '''
             background: rgba(30, 41, 59, 0.8);
         }
 
-        .header-title {
-            margin-bottom: 10px;
-        }
-
         .header-info {
             font-size: 0.9rem;
-            color: #64748b;
-            line-height: 1.4;
-        }
-
-        .dark-mode .header-info {
-            color: #94a3b8;
         }
 
         .theme-toggle {
             background: none;
-            border: 2px solid #cbd5e1;
-            padding: 8px 16px;
+            border: none;
+            padding: 8px;
             cursor: pointer;
             border-radius: 8px;
             color: inherit;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-        }
-
-        .theme-toggle:hover {
-            background: rgba(203, 213, 225, 0.1);
-            transform: scale(1.05);
         }
 
         .device-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }
@@ -118,19 +101,16 @@ HTML_TEMPLATE = '''
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .dark-mode .device-card {
             background: var(--card-dark);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         }
 
         .device-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 8px 12px -2px rgba(0, 0, 0, 0.15);
         }
 
         .device-card.allowed {
@@ -145,8 +125,6 @@ HTML_TEMPLATE = '''
             display: flex;
             align-items: center;
             margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid rgba(203, 213, 225, 0.2);
         }
 
         .status-indicator {
@@ -154,7 +132,6 @@ HTML_TEMPLATE = '''
             height: 12px;
             border-radius: 50%;
             margin-right: 10px;
-            position: relative;
         }
 
         .allowed .status-indicator {
@@ -167,30 +144,6 @@ HTML_TEMPLATE = '''
             box-shadow: 0 0 8px var(--danger-color);
         }
 
-        .status-indicator::after {
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 0.8;
-            }
-            70% {
-                transform: scale(2);
-                opacity: 0;
-            }
-            100% {
-                transform: scale(1);
-                opacity: 0;
-            }
-        }
-
         .device-name {
             font-weight: 600;
             font-size: 1.1rem;
@@ -199,42 +152,39 @@ HTML_TEMPLATE = '''
 
         .device-info {
             margin: 15px 0;
+            font-size: 0.9rem;
         }
 
         .info-row {
             display: flex;
             justify-content: space-between;
-            margin: 8px 0;
-            padding: 8px 0;
-            border-bottom: 1px dashed rgba(203, 213, 225, 0.2);
+            margin: 5px 0;
+            padding: 5px 0;
+            border-bottom: 1px dashed rgba(0,0,0,0.1);
+        }
+
+        .dark-mode .info-row {
+            border-bottom: 1px dashed rgba(255,255,255,0.1);
         }
 
         .info-label {
             color: #64748b;
             font-size: 0.85rem;
-            font-weight: 500;
-        }
-
-        .dark-mode .info-label {
-            color: #94a3b8;
         }
 
         .info-value {
-            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-family: monospace;
             font-size: 0.9rem;
         }
 
         .toggle-button {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 500;
-            font-size: 0.95rem;
-            transition: all 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            transition: all 0.2s;
         }
 
         .allowed .toggle-button {
@@ -248,12 +198,8 @@ HTML_TEMPLATE = '''
         }
 
         .toggle-button:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.1);
-        }
-
-        .toggle-button:active {
-            transform: translateY(1px);
+            opacity: 0.9;
+            transform: scale(1.02);
         }
 
         .toast {
@@ -261,19 +207,19 @@ HTML_TEMPLATE = '''
             bottom: 20px;
             right: 20px;
             padding: 15px 25px;
-            background: var(--card-light);
+            background: #fff;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             display: flex;
             align-items: center;
             gap: 10px;
-            z-index: 1000;
             animation: slideIn 0.3s ease-out;
+            z-index: 1000;
         }
 
         .dark-mode .toast {
             background: var(--card-dark);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            color: var(--text-dark);
         }
 
         @keyframes slideIn {
@@ -288,108 +234,26 @@ HTML_TEMPLATE = '''
             right: 0;
             height: 3px;
             background: linear-gradient(to right, var(--primary-color), var(--success-color));
-            z-index: 1000;
-        }
-
-        .loading::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(to right, transparent, white, transparent);
-            animation: loading 1.5s infinite;
+            animation: loading 1s infinite;
         }
 
         @keyframes loading {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
-        .site-blocking-controls {
-            margin-top: 15px;
-            margin-bottom: 15px;
-        }
-
-        .site-input-group {
-            display: flex;
-            gap: 10px;
-        }
-
-        .site-input {
-            flex: 1;
-            padding: 8px 12px;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            background: var(--card-light);
-            color: var(--text-light);
-        }
-
-        .dark-mode .site-input {
-            background: var(--card-dark);
-            border-color: #475569;
-            color: var(--text-dark);
-        }
-
-        .site-block-button {
-            padding: 8px 16px;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s ease;
-        }
-
-        .site-block-button:hover {
-            filter: brightness(1.1);
-        }
-
-        .blocked-sites-list {
-            margin-top: 5px;
-            font-size: 0.9rem;
-        }
-
-        .blocked-site {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 4px 8px;
-            margin: 4px 0;
-            background: rgba(203, 213, 225, 0.1);
-            border-radius: 4px;
-        }
-
-        .blocked-site button {
-            padding: 2px 8px;
-            border: none;
-            background: var(--danger-color);
-            color: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.8rem;
+            0% { width: 0; }
+            50% { width: 50%; }
+            100% { width: 100%; }
         }
 
         @media (max-width: 768px) {
-            .container { padding: 10px; }
-            .device-grid { grid-template-columns: 1fr; }
+            .container {
+                padding: 10px;
+            }
+            .device-grid {
+                grid-template-columns: 1fr;
+            }
             .header {
                 flex-direction: column;
-                gap: 15px;
+                gap: 10px;
                 text-align: center;
-            }
-            .theme-toggle {
-                width: 100%;
-                margin-top: 10px;
-            }
-            .site-input-group {
-                flex-direction: column;
-            }
-            .site-block-button {
-                width: 100%;
             }
         }
     </style>
@@ -399,29 +263,29 @@ HTML_TEMPLATE = '''
     <div class="container">
         <div class="header">
             <div>
-                <h1 class="header-title">Network Device Manager</h1>
+                <h1>Network Manager</h1>
                 <div class="header-info">
-                    <div>Current Date and Time (UTC): ''' + CURRENT_DATETIME + '''</div>
-                    <div>Current User's Login: ''' + CURRENT_USER + '''</div>
+                    <div>Time (UTC): ''' + TIMESTAMP + '''</div>
+                    <div>User: ''' + CURRENT_USER + '''</div>
                 </div>
             </div>
-            <button class="theme-toggle" onclick="toggleTheme()">🌓 Toggle Theme</button>
+            <button class="theme-toggle" onclick="toggleTheme()">🌓</button>
         </div>
         <div class="device-grid" id="deviceList"></div>
     </div>
 
     <script>
-        let isDarkMode = localStorage.getItem('darkMode') === 'true';
-        
+        let isDarkMode = false;
+
         function toggleTheme() {
             document.body.classList.toggle('dark-mode');
             isDarkMode = !isDarkMode;
             localStorage.setItem('darkMode', isDarkMode);
         }
 
-        // Initialize theme
-        if (isDarkMode) {
-            document.body.classList.add('dark-mode');
+        // Check saved theme preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            toggleTheme();
         }
 
         function showToast(message, isError = false) {
@@ -429,25 +293,19 @@ HTML_TEMPLATE = '''
             toast.className = 'toast';
             toast.innerHTML = `
                 <span style="color: ${isError ? 'var(--danger-color)' : 'var(--success-color)'}">
-                    ${isError ? '❌' : '✅'}
+                    ${isError ? '❌' : '✓'}
                 </span>
                 <span>${message}</span>
             `;
             document.body.appendChild(toast);
-            
             setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateX(100%)';
+                toast.style.animation = 'slideOut 0.3s ease-in forwards';
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
         }
 
         function toggleLoading(show) {
             document.getElementById('loadingBar').style.display = show ? 'block' : 'none';
-        }
-
-        function formatTimestamp(timestamp) {
-            return new Date(timestamp).toLocaleString();
         }
 
         function updateDeviceList() {
@@ -473,9 +331,7 @@ HTML_TEMPLATE = '''
                             <div class="device-info">
                                 <div class="info-row">
                                     <span class="info-label">Status</span>
-                                    <span class="info-value ${device.allowed ? 'text-success' : 'text-danger'}">
-                                        ${statusText}
-                                    </span>
+                                    <span class="info-value">${statusText}</span>
                                 </div>
                                 <div class="info-row">
                                     <span class="info-label">MAC Address</span>
@@ -484,16 +340,6 @@ HTML_TEMPLATE = '''
                                 <div class="info-row">
                                     <span class="info-label">IP Address</span>
                                     <span class="info-value">${device.ip}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">Blocked Sites</span>
-                                    <div class="blocked-sites-list" id="blocked-sites-${device.mac}">Loading...</div>
-                                </div>
-                            </div>
-                            <div class="site-blocking-controls">
-                                <div class="site-input-group">
-                                    <input type="text" id="site-input-${device.mac}" placeholder="Enter site to block (e.g., facebook.com)" class="site-input">
-                                    <button onclick="blockSite('${device.mac}')" class="site-block-button">Block Site</button>
                                 </div>
                             </div>
                             <button 
@@ -542,187 +388,19 @@ HTML_TEMPLATE = '''
             });
         }
 
-        function loadBlockedSites(mac) {
-            fetch(`/api/blocked-sites/${mac}`)
-                .then(response => response.json())
-                .then(sites => {
-                    const blockedSitesList = document.getElementById(`blocked-sites-${mac}`);
-                    if (sites.length === 0) {
-                        blockedSitesList.innerHTML = '<em>No blocked sites</em>';
-                    } else {
-                        blockedSitesList.innerHTML = sites.map(site => `
-                            <div class="blocked-site">
-                                <span>${site}</span>
-                                <button onclick="unblockSite('${mac}', '${site}')">Unblock</button>
-                            </div>
-                        `).join('');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showToast('Failed to load blocked sites', true);
-                });
-        }
-
-        function blockSite(mac) {
-            const input = document.getElementById(`site-input-${mac}`);
-            const site = input.value.trim().toLowerCase();
-            
-            if (!site) {
-                showToast('Please enter a site to block', true);
-                return;
-            }
-
-            toggleLoading(true);
-            fetch('/api/block-site', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ mac, site })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    input.value = '';
-                    showToast(`Successfully blocked ${site}`);
-                    // Add delay before refreshing the list to ensure backend has processed the change
-                    setTimeout(() => {
-                        updateBlockedSitesList(mac);
-                    }, 500);
-                } else {
-                    showToast('Failed to block site', true);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showToast('An error occurred', true);
-            })
-            .finally(() => {
-                toggleLoading(false);
-            });
-        }
-
-        function unblockSite(mac, site) {
-            toggleLoading(true);
-            fetch('/api/unblock-site', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ mac, site })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showToast(`Successfully unblocked ${site}`);
-                    // Add delay before refreshing the list to ensure backend has processed the change
-                    setTimeout(() => {
-                        updateBlockedSitesList(mac);
-                    }, 500);
-                } else {
-                    showToast('Failed to unblock site', true);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showToast('An error occurred', true);
-            })
-            .finally(() => {
-                toggleLoading(false);
-            });
-        }
-
-        // Cache for blocked sites to prevent UI flicker
-        const blockedSitesCache = new Map();
-
-        // Function to update blocked sites without clearing existing content
-        function updateBlockedSitesList(mac) {
-            const element = document.getElementById(`blocked-sites-${mac}`);
-            if (!element) return;
-
-            fetch(`/api/blocked-sites/${mac}`)
-                .then(response => response.json())
-                .then(sites => {
-                    // Update cache
-                    blockedSitesCache.set(mac, sites);
-                    
-                    if (sites.length === 0) {
-                        element.innerHTML = '<em>No blocked sites</em>';
-                    } else {
-                        element.innerHTML = sites.map(site => `
-                            <div class="blocked-site">
-                                <span>${site}</span>
-                                <button onclick="unblockSite('${mac}', '${site}')">Unblock</button>
-                            </div>
-                        `).join('');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    // Keep existing content on error
-                });
-        }
-
-        // Function to restore blocked sites from cache
-        function restoreBlockedSites(mac) {
-            const sites = blockedSitesCache.get(mac);
-            const element = document.getElementById(`blocked-sites-${mac}`);
-            if (sites && element) {
-                if (sites.length === 0) {
-                    element.innerHTML = '<em>No blocked sites</em>';
-                } else {
-                    element.innerHTML = sites.map(site => `
-                        <div class="blocked-site">
-                            <span>${site}</span>
-                            <button onclick="unblockSite('${mac}', '${site}')">Unblock</button>
-                        </div>
-                    `).join('');
-                }
-            }
-        }
-
-        // Modified updateDeviceList to preserve blocked sites state
-        const originalUpdateDeviceList = updateDeviceList;
-        updateDeviceList = function() {
-            const previousDevices = new Set(
-                Array.from(document.querySelectorAll('[id^="blocked-sites-"]'))
-                    .map(el => el.id.replace('blocked-sites-', ''))
-            );
-
-            originalUpdateDeviceList();
-
-            // Restore blocked sites from cache after DOM update
-            setTimeout(() => {
-                document.querySelectorAll('[id^="blocked-sites-"]').forEach(element => {
-                    const mac = element.id.replace('blocked-sites-', '');
-                    if (!previousDevices.has(mac)) {
-                        updateBlockedSitesList(mac);
-                    } else {
-                        restoreBlockedSites(mac);
-                    }
-                });
-            }, 100);
-        };
-
-        // Replace loadBlockedSites with updateBlockedSitesList
-        function loadBlockedSites(mac) {
-            updateBlockedSitesList(mac);
-        }
-
-        // Initial update and less frequent interval
+        // Update device list every 5 seconds
         updateDeviceList();
-        setInterval(updateDeviceList, 60000); // Update every 60 seconds for better stability
+        setInterval(updateDeviceList, 5000);
     </script>
 </body>
 </html>
 '''
+
+
 class HotspotManager:
     def __init__(self):
         self.devices_file = "devices.json"
-        self.blocked_sites_file = "blocked_sites.json"
         self.load_devices()
-        self.load_blocked_sites()
 
     def load_devices(self):
         try:
@@ -734,76 +412,6 @@ class HotspotManager:
     def save_devices(self):
         with open(self.devices_file, 'w') as f:
             json.dump(self.devices, f)
-
-    def load_blocked_sites(self):
-        try:
-            with open(self.blocked_sites_file, 'r') as f:
-                self.blocked_sites = json.load(f)
-        except FileNotFoundError:
-            self.blocked_sites = {}  # mac -> list of blocked sites
-
-    def save_blocked_sites(self):
-        with open(self.blocked_sites_file, 'w') as f:
-            json.dump(self.blocked_sites, f)
-
-    def block_site(self, mac, site):
-        mac = mac.upper()
-        site = site.lower().strip()  # Normalize site to lowercase and remove whitespace
-        
-        # Basic URL validation
-        if not re.match(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$', site):
-            return False
-
-        if mac not in self.blocked_sites:
-            self.blocked_sites[mac] = []
-        
-        if site not in self.blocked_sites[mac]:
-            self.blocked_sites[mac].append(site)
-            try:
-                # Block both www and non-www variants
-                for prefix in ['', 'www.']:
-                    site_variant = f"{prefix}{site}"
-                    # Block DNS resolution
-                    subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
-                    subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
-                    
-                    # Block HTTP/HTTPS traffic
-                    subprocess.run(['su', '-c', f'iptables -I FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site_variant}" --algo bm -j DROP'])
-                
-                self.save_blocked_sites()
-                return True
-            except subprocess.CalledProcessError as e:
-                print(f"Error executing iptables command: {e}")
-                return False
-        return True
-
-    def unblock_site(self, mac, site):
-        mac = mac.upper()
-        site = site.lower().strip()  # Normalize site to lowercase and remove whitespace
-        
-        if mac in self.blocked_sites and site in self.blocked_sites[mac]:
-            self.blocked_sites[mac].remove(site)
-            try:
-                # Remove both www and non-www variants
-                for prefix in ['', 'www.']:
-                    site_variant = f"{prefix}{site}"
-                    # Remove DNS blocking rules
-                    subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p udp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
-                    subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp --dport 53 -m string --string "{site_variant}" --algo bm -j DROP'])
-                    
-                    # Remove HTTP/HTTPS blocking rules
-                    subprocess.run(['su', '-c', f'iptables -D FORWARD -m mac --mac-source {mac} -p tcp -m multiport --dports 80,443 -m string --string "Host: {site_variant}" --algo bm -j DROP'])
-                
-                self.save_blocked_sites()
-                return True
-            except subprocess.CalledProcessError as e:
-                print(f"Error executing iptables command: {e}")
-                return False
-        return True
-
-    def get_blocked_sites(self, mac):
-        mac = mac.upper()
-        return self.blocked_sites.get(mac, [])
 
     def get_connected_devices(self):
         try:
@@ -902,31 +510,6 @@ def toggle_device():
         success = hotspot_manager.toggle_access(mac)
         return jsonify({'success': success})
     return jsonify({'success': False, 'error': 'No MAC address provided'})
-
-@app.route('/api/block-site', methods=['POST'])
-def block_site():
-    data = request.get_json()
-    mac = data.get('mac')
-    site = data.get('site')
-    if mac and site:
-        success = hotspot_manager.block_site(mac, site)
-        return jsonify({'success': success})
-    return jsonify({'success': False, 'error': 'MAC address and site required'})
-
-@app.route('/api/unblock-site', methods=['POST'])
-def unblock_site():
-    data = request.get_json()
-    mac = data.get('mac')
-    site = data.get('site')
-    if mac and site:
-        success = hotspot_manager.unblock_site(mac, site)
-        return jsonify({'success': success})
-    return jsonify({'success': False, 'error': 'MAC address and site required'})
-
-@app.route('/api/blocked-sites/<mac>')
-def get_blocked_sites(mac):
-    sites = hotspot_manager.get_blocked_sites(mac)
-    return jsonify(sites)
 
 if __name__ == '__main__':
     # Run the Flask app on port 8080
