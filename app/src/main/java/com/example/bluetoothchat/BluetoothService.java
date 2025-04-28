@@ -14,7 +14,7 @@ import java.util.UUID;
 public class BluetoothService {
     private static final String TAG = "BluetoothService";
     private static final String APP_NAME = "BluetoothChat";
-    private static final String APP_UUID = "fa87c0d0-afac-11de-8a39-0800200c9a66";
+    private static final UUID APP_UUID = UUID.fromString("fa87c0d0-afac-11de-8a39-0800200c9a66");
     private static final String PREF_LAST_DEVICE = "last_connected_device";
     
     public enum ConnectionStatus {
