@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import java.util.Set;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
@@ -51,6 +52,12 @@ public class MainActivity extends AppCompatActivity {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 if (device != null && deviceAdapter != null) {
                     deviceAdapter.addDevice(device);
+                    scanDialog.findViewById(R.id.emptyText).setVisibility(View.GONE);
+                }
+            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+                scanDialog.findViewById(R.id.scanProgress).setVisibility(View.GONE);
+                if (deviceAdapter.getItemCount() == 0) {
+                    scanDialog.findViewById(R.id.emptyText).setVisibility(View.VISIBLE);
                 }
             }
         }
@@ -105,7 +112,9 @@ public class MainActivity extends AppCompatActivity {
         checkBluetoothRequirements();
         
         // Register for broadcasts when a device is discovered
-        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BluetoothDevice.ACTION_FOUND);
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         registerReceiver(scanReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
     }
 
@@ -153,10 +162,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void requestBluetoothPermissions() {
-        String[] permissions = {
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_SCAN
-        };
+        String[] permissions;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions = new String[] {
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN
+            };
+        } else {
+            permissions = new String[] {
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            };
+        }
 
         boolean allPermissionsGranted = true;
         for (String permission : permissions) {
@@ -296,8 +313,29 @@ public class MainActivity extends AppCompatActivity {
         deviceAdapter.clearDevices();
         scanDialog.show();
         
+        View scanProgress = scanDialog.findViewById(R.id.scanProgress);
+        TextView emptyText = scanDialog.findViewById(R.id.emptyText);
+        
+        // Show progress and hide empty text initially
+        scanProgress.setVisibility(View.VISIBLE);
+        emptyText.setVisibility(View.GONE);
+        
+        // Add paired devices first
+        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+        if (pairedDevices.size() > 0) {
+            for (BluetoothDevice device : pairedDevices) {
+                deviceAdapter.addDevice(device);
+            }
+        }
+        
+        // Start discovery
         if (bluetoothAdapter.isDiscovering()) {
             bluetoothAdapter.cancelDiscovery();
+        }
+        
+        // Show empty text if no devices found
+        if (deviceAdapter.getItemCount() == 0) {
+            emptyText.setVisibility(View.VISIBLE);
         }
         
         bluetoothAdapter.startDiscovery();
