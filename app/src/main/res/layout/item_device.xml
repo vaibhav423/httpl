@@ -1,29 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="?android:attr/selectableItemBackground">
+    android:padding="@dimen/device_item_padding"
+    android:layout_marginVertical="@dimen/device_item_margin"
+    android:background="?android:attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true">
 
     <TextView
         android:id="@+id/deviceName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
+        android:textSize="@dimen/device_name_text_size"
         android:textColor="@android:color/black"
         android:textStyle="bold"
         android:ellipsize="end"
-        android:maxLines="1"/>
+        android:maxLines="1"
+        tools:text="Device Name" />
 
     <TextView
         android:id="@+id/deviceAddress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="@dimen/device_address_text_size"
         android:textColor="#666666"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="@dimen/status_margin"
         android:ellipsize="end"
-        android:maxLines="1"/>
+        android:maxLines="1"
+        tools:text="00:11:22:33:44:55" />
 
 </LinearLayout>

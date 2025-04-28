@@ -2,39 +2,41 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:id="@+id/statusLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
+        android:padding="@dimen/status_padding"
         android:background="#F5F5F5"
-        android:padding="8dp"
-        android:layout_marginBottom="8dp"
         app:layout_constraintTop_toTopOf="parent">
 
         <TextView
             android:id="@+id/connectionStatus"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Status: Disconnected"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp"/>
+            android:text="@string/status_disconnected"
+            android:textSize="@dimen/status_text_size"
+            android:textColor="#666666" />
 
         <TextView
             android:id="@+id/connectedDevice"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="No device connected"
-            android:layout_marginBottom="4dp"/>
+            android:text="@string/no_device_connected"
+            android:textSize="@dimen/status_text_size"
+            android:textColor="#666666"
+            android:layout_marginTop="@dimen/status_margin" />
 
         <Button
             android:id="@+id/scanButton"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Scan for Devices"/>
+            android:text="@string/scan_for_devices"
+            android:layout_marginTop="@dimen/input_margin"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
     </LinearLayout>
 
@@ -42,37 +44,41 @@
         android:id="@+id/messageRecyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginBottom="16dp"
+        android:padding="@dimen/status_padding"
         android:clipToPadding="false"
-        android:padding="8dp"
-        android:scrollbars="vertical"
-        android:fadeScrollbars="false"
-        android:stackFromBottom="true"
-        android:transcriptMode="alwaysScroll"
         app:layout_constraintTop_toBottomOf="@id/statusLayout"
-        app:layout_constraintBottom_toTopOf="@id/messageInput" />
+        app:layout_constraintBottom_toTopOf="@id/inputLayout" />
 
-    <EditText
-        android:id="@+id/messageInput"
-        android:layout_width="0dp"
+    <LinearLayout
+        android:id="@+id/inputLayout"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
-        android:hint="Type a message"
-        android:inputType="text"
-        android:maxLines="1"
-        android:padding="12dp"
-        android:background="@drawable/message_background"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/sendButton"
-        app:layout_constraintStart_toStartOf="parent" />
+        android:orientation="horizontal"
+        android:padding="@dimen/input_padding"
+        android:background="#FFFFFF"
+        android:elevation="@dimen/input_elevation"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-    <Button
-        android:id="@+id/sendButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Send"
-        android:enabled="false"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        <EditText
+            android:id="@+id/messageInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/hint_type_message"
+            android:padding="@dimen/input_padding"
+            android:background="@null"
+            android:maxLines="4"
+            android:inputType="textMultiLine"
+            android:importantForAutofill="no" />
+
+        <Button
+            android:id="@+id/sendButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/button_send"
+            android:enabled="false"
+            android:layout_marginStart="@dimen/input_margin" />
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

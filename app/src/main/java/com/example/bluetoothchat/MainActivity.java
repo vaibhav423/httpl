@@ -25,6 +25,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -125,14 +126,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onStart() {
-        super.onStart();
+    protected void onResume() {
+        super.onResume();
         registerReceivers();
     }
 
     @Override
-    protected void onStop() {
-        super.onStop();
+    protected void onPause() {
+        super.onPause();
         if (bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
             bluetoothAdapter.cancelDiscovery();
         }
@@ -186,6 +187,8 @@ public class MainActivity extends AppCompatActivity {
                 intent.putExtra(ChatService.EXTRA_MESSAGE, message);
                 sendBroadcast(intent);
                 messageInput.setText("");
+                messageAdapter.addMessage(message, true);
+                messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
             }
         });
 
@@ -309,41 +312,34 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        List<String> permissions = new ArrayList<>();
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            requestBluetoothPermissions();
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN);
+            permissions.add(Manifest.permission.FOREGROUND_SERVICE);
+            permissions.add(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
         } else {
-            checkBluetoothEnabled();
-        }
-    }
-
-    private void requestBluetoothPermissions() {
-        String[] permissions;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions = new String[] {
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.FOREGROUND_SERVICE,
-                Manifest.permission.POST_NOTIFICATIONS
-            };
-        } else {
-            permissions = new String[] {
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            };
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
 
-        boolean allPermissionsGranted = true;
+        List<String> permissionsToRequest = new ArrayList<>();
         for (String permission : permissions) {
             if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                allPermissionsGranted = false;
-                break;
+                permissionsToRequest.add(permission);
             }
         }
 
-        if (allPermissionsGranted) {
-            checkBluetoothEnabled();
+        if (!permissionsToRequest.isEmpty()) {
+            ActivityCompat.requestPermissions(this, 
+                permissionsToRequest.toArray(new String[0]), 
+                PERMISSION_REQUEST_CODE);
         } else {
-            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
+            checkBluetoothEnabled();
         }
     }
 
@@ -351,15 +347,15 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            boolean allPermissionsGranted = true;
+            boolean allGranted = true;
             for (int result : grantResults) {
                 if (result != PackageManager.PERMISSION_GRANTED) {
-                    allPermissionsGranted = false;
+                    allGranted = false;
                     break;
                 }
             }
 
-            if (allPermissionsGranted) {
+            if (allGranted) {
                 checkBluetoothEnabled();
             } else {
                 Toast.makeText(this, "Required permissions not granted", Toast.LENGTH_SHORT).show();
@@ -375,5 +371,11 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startChatService();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        unregisterReceivers();
     }
 }

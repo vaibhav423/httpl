@@ -1,5 +1,6 @@
 package com.example.bluetoothchat;
 
+import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -10,6 +11,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
@@ -21,12 +23,15 @@ public class ChatService extends Service {
     public static final String ACTION_TALK = "action:talk";
     public static final String ACTION_LISTEN = "action:listen";
     public static final String EXTRA_MESSAGE = "message";
-    private static final String CHANNEL_ID = "BluetoothChat";
+    
+    private static final String CHANNEL_ID = "BluetoothChatChannel";
     private static final int NOTIFICATION_ID = 1;
     
     private BluetoothService bluetoothService;
     private DatabaseHelper databaseHelper;
-    private String username = "User"; // Default username
+    private NotificationManager notificationManager;
+    private String username = "User";
+    private boolean isServiceStarted = false;
 
     private final BroadcastReceiver talkReceiver = new BroadcastReceiver() {
         @Override
@@ -41,10 +46,11 @@ public class ChatService extends Service {
     };
 
     private final BluetoothService.MessageCallback messageCallback = message -> {
-        // Save received message
         if (bluetoothService != null && bluetoothService.getConnectedDevice() != null) {
-            String deviceAddress = bluetoothService.getConnectedDevice().getAddress();
-            databaseHelper.saveMessage(message, false, deviceAddress, username);
+            BluetoothDevice device = bluetoothService.getConnectedDevice();
+            
+            // Save received message
+            databaseHelper.saveMessage(message, false, device.getAddress(), username);
 
             // Broadcast received message
             Intent intent = new Intent(ACTION_LISTEN);
@@ -52,14 +58,13 @@ public class ChatService extends Service {
             sendBroadcast(intent);
 
             // Update notification
-            updateNotification("New message from " + 
-                bluetoothService.getConnectedDevice().getName());
+            updateNotification(getString(R.string.new_message, device.getName()));
         }
     };
 
     private final BluetoothService.ConnectionCallback connectionCallback = (status, device) -> {
-        String action = "com.example.bluetoothchat.CONNECTION_STATUS_CHANGED";
-        Intent intent = new Intent(action);
+        // Broadcast status change
+        Intent intent = new Intent("com.example.bluetoothchat.CONNECTION_STATUS_CHANGED");
         intent.putExtra("status", status.name());
         if (device != null) {
             intent.putExtra("device_name", device.getName());
@@ -68,27 +73,45 @@ public class ChatService extends Service {
         sendBroadcast(intent);
 
         // Update notification
-        updateNotification(getStatusText(status, device));
+        updateNotification(getStatusString(status, device));
     };
 
     @Override
     public void onCreate() {
         super.onCreate();
         databaseHelper = new DatabaseHelper(this);
+        notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         
-        // Register for message broadcasts
-        IntentFilter filter = new IntentFilter(ACTION_TALK);
-        registerReceiver(talkReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-
+        // Initialize notification channel first
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, createNotification("Starting service..."));
+
+        // Register receiver
+        registerReceiver(talkReceiver, new IntentFilter(ACTION_TALK), Context.RECEIVER_NOT_EXPORTED);
         
         // Initialize Bluetooth service
         initializeBluetoothService();
     }
 
+    @SuppressLint("NewApi")
+    private void startForegroundService() {
+        if (!isServiceStarted) {
+            Notification notification = createNotification(getString(R.string.starting_service));
+            
+            if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE)
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+            
+            isServiceStarted = true;
+        }
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // Start foreground service
+        startForegroundService();
+        
         if (intent != null) {
             if (intent.hasExtra("username")) {
                 username = intent.getStringExtra("username");
@@ -108,47 +131,76 @@ public class ChatService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "Bluetooth Chat",
+                getString(R.string.chat_notification_channel),
                 NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Bluetooth Chat Service");
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(channel);
+            channel.setDescription(getString(R.string.chat_notification_description));
+            channel.setShowBadge(false);
+            notificationManager.createNotificationChannel(channel);
         }
     }
 
-    private Notification createNotification(String text) {
+    private Notification createNotification(String content) {
         Intent notificationIntent = new Intent(this, MainActivity.class);
+        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        
+        @SuppressLint("UnspecifiedImmutableFlag")
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent, 
             PendingIntent.FLAG_IMMUTABLE
         );
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Bluetooth Chat")
-            .setContentText(text)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(content)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build();
     }
 
-    private void updateNotification(String text) {
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        manager.notify(NOTIFICATION_ID, createNotification(text));
+    private void updateNotification(String content) {
+        Notification notification = createNotification(content);
+        notificationManager.notify(NOTIFICATION_ID, notification);
     }
 
-    private String getStatusText(BluetoothService.ConnectionStatus status, BluetoothDevice device) {
+    private String getStatusString(BluetoothService.ConnectionStatus status, BluetoothDevice device) {
+        String deviceName = device != null ? device.getName() : getString(R.string.no_device_connected);
         switch (status) {
             case NONE:
-                return "Disconnected";
+                return getString(R.string.status_disconnected);
             case LISTENING:
-                return "Waiting for connection";
+                return getString(R.string.status_listening);
             case CONNECTING:
-                return "Connecting to " + (device != null ? device.getName() : "device");
+                return getString(R.string.status_connecting, deviceName);
             case CONNECTED:
-                return "Connected to " + (device != null ? device.getName() : "device");
+                return getString(R.string.status_connected, deviceName);
             default:
-                return "Unknown status";
+                return getString(R.string.status_disconnected);
+        }
+    }
+
+    private void initializeBluetoothService() {
+        try {
+            bluetoothService = new BluetoothService(this, messageCallback, connectionCallback);
+            bluetoothService.start();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to initialize BluetoothService", e);
+            stopSelf();
+        }
+    }
+
+    private void sendMessage(String message) {
+        if (bluetoothService != null && bluetoothService.isConnected()) {
+            BluetoothDevice device = bluetoothService.getConnectedDevice();
+            
+            // Save message to database
+            databaseHelper.saveMessage(message, true, device.getAddress(), username);
+
+            // Send message via Bluetooth
+            bluetoothService.sendMessage(message);
         }
     }
 
@@ -158,32 +210,17 @@ public class ChatService extends Service {
         return null;
     }
 
-    private void initializeBluetoothService() {
-        bluetoothService = new BluetoothService(this, messageCallback, connectionCallback);
-        bluetoothService.start();
-    }
-
-    private void sendMessage(String message) {
-        if (bluetoothService != null && bluetoothService.isConnected()) {
-            // Save message to database
-            BluetoothDevice device = bluetoothService.getConnectedDevice();
-            databaseHelper.saveMessage(message, true, device.getAddress(), username);
-
-            // Send message via Bluetooth
-            bluetoothService.sendMessage(message);
-        }
-    }
-
     @Override
     public void onDestroy() {
         super.onDestroy();
         try {
             unregisterReceiver(talkReceiver);
         } catch (IllegalArgumentException e) {
-            // Receiver not registered
+            Log.e(TAG, "Error unregistering receiver", e);
         }
         if (bluetoothService != null) {
             bluetoothService.stop();
         }
+        isServiceStarted = false;
     }
 }
