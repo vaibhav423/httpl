@@ -170,17 +170,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initializeBluetoothService() {
-        bluetoothService = new BluetoothService(this, message -> {
-            Intent intent = new Intent(ACTION_LISTEN);
-            intent.putExtra(EXTRA_MESSAGE, message);
-            sendBroadcast(intent);
-        });
+        try {
+            bluetoothService = new BluetoothService(this, message -> {
+                Intent intent = new Intent(ACTION_LISTEN);
+                intent.putExtra(EXTRA_MESSAGE, message);
+                sendBroadcast(intent);
+            });
+            
+            // Only register receivers if service initialization succeeded
+            if (bluetoothService != null) {
+                IntentFilter talkFilter = new IntentFilter(ACTION_TALK);
+                registerReceiver(talkReceiver, talkFilter);
 
-        IntentFilter talkFilter = new IntentFilter(ACTION_TALK);
-        registerReceiver(talkReceiver, talkFilter);
-
-        IntentFilter listenFilter = new IntentFilter(ACTION_LISTEN);
-        registerReceiver(listenReceiver, listenFilter);
+                IntentFilter listenFilter = new IntentFilter(ACTION_LISTEN);
+                registerReceiver(listenReceiver, listenFilter);
+            } else {
+                Toast.makeText(this, "Failed to initialize Bluetooth service", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        } catch (Exception e) {
+            Log.e("MainActivity", "Error initializing Bluetooth service", e);
+            Toast.makeText(this, "Failed to initialize Bluetooth service: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            finish();
+        }
     }
 
     @Override

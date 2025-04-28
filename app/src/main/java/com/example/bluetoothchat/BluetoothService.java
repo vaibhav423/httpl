@@ -89,8 +89,13 @@ public class BluetoothService {
         }
 
         public void run() {
+            if (serverSocket == null) {
+                Log.e(TAG, "ServerSocket was not initialized properly");
+                return;
+            }
+
             BluetoothSocket socket;
-            while (true) {
+            while (!Thread.currentThread().isInterrupted()) {
                 try {
                     socket = serverSocket.accept();
                 } catch (IOException e) {
@@ -164,6 +169,9 @@ public class BluetoothService {
         private final OutputStream outputStream;
 
         public ConnectedThread(BluetoothSocket socket) {
+            if (socket == null) {
+                throw new IllegalArgumentException("Socket cannot be null");
+            }
             this.socket = socket;
             InputStream tmpIn = null;
             OutputStream tmpOut = null;
@@ -175,11 +183,26 @@ public class BluetoothService {
                 Log.e(TAG, "Error occurred when creating input/output streams", e);
             }
 
+            if (tmpIn == null || tmpOut == null) {
+                Log.e(TAG, "Failed to create input/output streams");
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Could not close the connect socket", e);
+                }
+                throw new IllegalStateException("Failed to initialize streams");
+            }
+
             inputStream = tmpIn;
             outputStream = tmpOut;
         }
 
         public void run() {
+            if (inputStream == null || outputStream == null) {
+                Log.e(TAG, "Input or output stream is null");
+                return;
+            }
+
             byte[] buffer = new byte[1024];
             int numBytes;
 
@@ -196,8 +219,13 @@ public class BluetoothService {
         }
 
         public void write(byte[] bytes) {
+            if (outputStream == null) {
+                Log.e(TAG, "Output stream is null");
+                return;
+            }
             try {
                 outputStream.write(bytes);
+                outputStream.flush();
             } catch (IOException e) {
                 Log.e(TAG, "Error occurred when sending data", e);
             }
