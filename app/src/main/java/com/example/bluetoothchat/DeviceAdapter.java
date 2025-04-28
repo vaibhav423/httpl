@@ -5,47 +5,41 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
 public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder> {
-    private List<BluetoothDevice> devices = new ArrayList<>();
-    private OnDeviceClickListener listener;
+    private final List<BluetoothDevice> devices = new ArrayList<>();
+    private final DeviceClickListener listener;
 
-    public interface OnDeviceClickListener {
+    public interface DeviceClickListener {
         void onDeviceClick(BluetoothDevice device);
     }
 
-    public DeviceAdapter(OnDeviceClickListener listener) {
+    public DeviceAdapter(DeviceClickListener listener) {
         this.listener = listener;
     }
 
-    public void addDevice(BluetoothDevice device) {
-        if (!devices.contains(device)) {
-            devices.add(device);
-            notifyItemInserted(devices.size() - 1);
-        }
-    }
-
-    public void clearDevices() {
-        devices.clear();
-        notifyDataSetChanged();
-    }
-
+    @NonNull
     @Override
-    public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+    public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.item_device, parent, false);
         return new ViewHolder(view);
     }
 
     @Override
-    public void onBindViewHolder(ViewHolder holder, int position) {
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         BluetoothDevice device = devices.get(position);
         String deviceName = device.getName();
-        holder.deviceName.setText(deviceName != null ? deviceName : "Unknown Device");
+        if (deviceName == null || deviceName.isEmpty()) {
+            deviceName = device.getAddress();
+        }
+        holder.deviceName.setText(deviceName);
         holder.deviceAddress.setText(device.getAddress());
+        
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) {
                 listener.onDeviceClick(device);
@@ -56,6 +50,23 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.ViewHolder
     @Override
     public int getItemCount() {
         return devices.size();
+    }
+
+    public void addDevice(BluetoothDevice device) {
+        String deviceAddress = device.getAddress();
+        for (BluetoothDevice existingDevice : devices) {
+            if (existingDevice.getAddress().equals(deviceAddress)) {
+                return; // Device already in list
+            }
+        }
+        devices.add(device);
+        notifyItemInserted(devices.size() - 1);
+    }
+
+    public void clearDevices() {
+        int size = devices.size();
+        devices.clear();
+        notifyItemRangeRemoved(0, size);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

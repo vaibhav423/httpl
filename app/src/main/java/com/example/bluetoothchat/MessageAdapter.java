@@ -1,6 +1,5 @@
 package com.example.bluetoothchat;
 
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,11 +18,11 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
     public static class Message {
-        final String text;
-        final boolean isSent;
-        final long timestamp;
+        public final String text;
+        public final boolean isSent;
+        public final long timestamp;
 
-        Message(String text, boolean isSent) {
+        public Message(String text, boolean isSent) {
             this.text = text;
             this.isSent = isSent;
             this.timestamp = System.currentTimeMillis();
@@ -42,6 +41,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Message message = messages.get(position);
         
+        // Set message text and timestamp
         holder.messageText.setText(message.text);
         holder.timestamp.setText(timeFormat.format(new Date(message.timestamp)));
 
@@ -78,6 +78,12 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
     public void addMessage(String text, boolean isSent) {
         messages.add(new Message(text, isSent));
         notifyItemInserted(messages.size() - 1);
+    }
+
+    public void clear() {
+        int size = messages.size();
+        messages.clear();
+        notifyItemRangeRemoved(0, size);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

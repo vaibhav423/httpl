@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="12dp"
+    android:padding="16dp"
     android:background="?android:attr/selectableItemBackground">
 
     <TextView
@@ -11,14 +11,19 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="16sp"
+        android:textColor="@android:color/black"
         android:textStyle="bold"
-        android:layout_marginBottom="4dp"/>
+        android:ellipsize="end"
+        android:maxLines="1"/>
 
     <TextView
         android:id="@+id/deviceAddress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="14sp"
-        android:textColor="#666666"/>
+        android:textColor="#666666"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"/>
 
 </LinearLayout>

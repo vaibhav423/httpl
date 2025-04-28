@@ -46,6 +46,14 @@ public class BluetoothService {
         void onConnectionStatusChanged(ConnectionStatus status, BluetoothDevice device);
     }
 
+    public BluetoothAdapter getBluetoothAdapter() {
+        return bluetoothAdapter;
+    }
+
+    public BluetoothDevice getConnectedDevice() {
+        return connectedDevice;
+    }
+
     public BluetoothService(Context context, MessageCallback messageCallback, ConnectionCallback connectionCallback) {
         this.context = context;
         this.messageCallback = messageCallback;
@@ -56,12 +64,9 @@ public class BluetoothService {
 
     public synchronized void start() {
         Log.d(TAG, "start");
-
-        // Cancel any current connections
         cancelConnectThread();
         cancelConnectedThread();
 
-        // Start the accept thread
         if (acceptThread == null) {
             acceptThread = new AcceptThread();
             acceptThread.start();
@@ -71,38 +76,24 @@ public class BluetoothService {
 
     public synchronized void connect(BluetoothDevice device) {
         Log.d(TAG, "Connecting to: " + device.getName());
+        cancelConnectThread();
+        cancelConnectedThread();
 
-        // Cancel any current attempts to connect
-        if (status == ConnectionStatus.CONNECTING) {
-            cancelConnectThread();
-        }
-
-        // Cancel any current connections
-        if (connectedThread != null) {
-            cancelConnectedThread();
-        }
-
-        // Start the connection thread
         connectThread = new ConnectThread(device);
         connectThread.start();
         updateStatus(ConnectionStatus.CONNECTING, device);
     }
 
-    public synchronized void connected(BluetoothSocket socket) {
+    private synchronized void connected(BluetoothSocket socket) {
         Log.d(TAG, "Connected to " + socket.getRemoteDevice().getName());
-
-        // Cancel any current threads
         cancelConnectThread();
         cancelConnectedThread();
         cancelAcceptThread();
 
-        // Start the connected thread
         connectedThread = new ConnectedThread(socket);
         connectedThread.start();
 
-        // Save device and update status
         BluetoothDevice device = socket.getRemoteDevice();
-        saveLastConnectedDevice(device.getAddress());
         updateStatus(ConnectionStatus.CONNECTED, device);
     }
 
@@ -135,36 +126,6 @@ public class BluetoothService {
         }
     }
 
-    private synchronized void connectionFailed() {
-        updateStatus(ConnectionStatus.NONE, null);
-        start();
-    }
-
-    private synchronized void connectionLost() {
-        updateStatus(ConnectionStatus.NONE, null);
-        start();
-    }
-
-    public synchronized void sendMessage(String message) {
-        if (status != ConnectionStatus.CONNECTED || connectedThread == null) {
-            Log.w(TAG, "Cannot send message - not connected");
-            return;
-        }
-        
-        // Convert message to bytes and add length prefix
-        byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
-        ByteBuffer buffer = ByteBuffer.allocate(4 + messageBytes.length);
-        buffer.putInt(messageBytes.length);
-        buffer.put(messageBytes);
-        
-        // Send the message
-        connectedThread.write(buffer.array());
-    }
-
-    public boolean isConnected() {
-        return status == ConnectionStatus.CONNECTED;
-    }
-
     private void updateStatus(ConnectionStatus newStatus, BluetoothDevice device) {
         synchronized (lock) {
             if (status != newStatus || (device != null && !device.equals(connectedDevice))) {
@@ -178,16 +139,22 @@ public class BluetoothService {
         }
     }
 
-    private String getLastConnectedDevice() {
-        return context.getSharedPreferences(APP_NAME, Context.MODE_PRIVATE)
-                .getString(PREF_LAST_DEVICE, null);
+    public boolean isConnected() {
+        return status == ConnectionStatus.CONNECTED;
     }
 
-    private void saveLastConnectedDevice(String address) {
-        context.getSharedPreferences(APP_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(PREF_LAST_DEVICE, address)
-                .apply();
+    public synchronized void sendMessage(String message) {
+        if (status != ConnectionStatus.CONNECTED || connectedThread == null) {
+            Log.w(TAG, "Cannot send message - not connected");
+            return;
+        }
+        
+        byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(4 + messageBytes.length);
+        buffer.putInt(messageBytes.length);
+        buffer.put(messageBytes);
+        
+        connectedThread.write(buffer.array());
     }
 
     private class AcceptThread extends Thread {
@@ -219,12 +186,10 @@ public class BluetoothService {
                             switch (status) {
                                 case LISTENING:
                                 case CONNECTING:
-                                    // Normal connection scenario
                                     connected(socket);
                                     break;
                                 case NONE:
                                 case CONNECTED:
-                                    // Not ready for connection or already connected
                                     try {
                                         socket.close();
                                     } catch (IOException e) {
@@ -278,13 +243,12 @@ public class BluetoothService {
                 if (socket == null) throw new IOException("Socket is null");
                 socket.connect();
             } catch (IOException e) {
-                Log.e(TAG, "Connection failed", e);
                 try {
                     socket.close();
                 } catch (IOException closeException) {
                     Log.e(TAG, "Could not close the client socket", closeException);
                 }
-                connectionFailed();
+                updateStatus(ConnectionStatus.NONE, null);
                 return;
             }
 
@@ -335,7 +299,6 @@ public class BluetoothService {
 
             while (isRunning) {
                 try {
-                    // Read message length first
                     readFully(inputStream, lengthBuffer, 0, 4);
                     int messageLength = ByteBuffer.wrap(lengthBuffer).getInt();
 
@@ -343,31 +306,30 @@ public class BluetoothService {
                         throw new IOException("Invalid message length: " + messageLength);
                     }
 
-                    // Read the message
                     readFully(inputStream, messageBuffer, 0, messageLength);
                     String message = new String(messageBuffer, 0, messageLength, StandardCharsets.UTF_8);
                     
                     Log.d(TAG, "Message received: " + message);
                     messageCallback.onMessageReceived(message);
-
                 } catch (IOException e) {
                     if (isRunning) {
                         Log.e(TAG, "Connection lost", e);
-                        connectionLost();
+                        updateStatus(ConnectionStatus.NONE, null);
                     }
                     break;
                 }
             }
         }
 
-        private void readFully(InputStream input, byte[] buffer, int offset, int length) throws IOException {
-            int bytesRead = 0;
-            while (bytesRead < length) {
-                int result = input.read(buffer, offset + bytesRead, length - bytesRead);
-                if (result == -1) {
+        private void readFully(InputStream input, byte[] buffer, int offset, int length) 
+                throws IOException {
+            int remaining = length;
+            while (remaining > 0) {
+                int count = input.read(buffer, offset + (length - remaining), remaining);
+                if (count == -1) {
                     throw new IOException("End of stream");
                 }
-                bytesRead += result;
+                remaining -= count;
             }
         }
 
@@ -380,7 +342,7 @@ public class BluetoothService {
                 Log.d(TAG, "Message sent successfully");
             } catch (IOException e) {
                 Log.e(TAG, "Error sending message", e);
-                connectionLost();
+                updateStatus(ConnectionStatus.NONE, null);
             }
         }
 
