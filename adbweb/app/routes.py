@@ -114,3 +114,27 @@ def launch_app():
         return jsonify({'status': 'success', 'message': f'Launched {package_name}'})
     else:
         return jsonify({'status': 'error', 'message': f'Failed to launch {package_name}'})
+
+@app.route('/foreground-app')
+def get_foreground_app():
+    # Get the current foreground app using dumpsys
+    cmd = "dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' | cut -d'/' -f1 | grep -o '[^ ]*$'"
+    result = run_adb_command(['shell', cmd])
+    
+    if result:
+        # Get the app name for this package
+        package_name = result.strip()
+        name_cmd = f"dumpsys package \"{package_name}\" | grep -m 1 \"application-label:\" | cut -d':' -f2"
+        name_result = run_adb_command(['shell', name_cmd])
+        
+        app_name = name_result.strip().strip("'") if name_result else package_name
+        return jsonify({
+            'status': 'success',
+            'package': package_name,
+            'name': app_name
+        })
+    
+    return jsonify({
+        'status': 'error',
+        'message': 'Failed to get foreground app'
+    })

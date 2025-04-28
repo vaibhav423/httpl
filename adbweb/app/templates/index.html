@@ -15,6 +15,7 @@
             --bg-color: #f8f9fa;
             --card-shadow: 0 2px 4px rgba(0,0,0,0.1);
             --modal-bg: rgba(0, 0, 0, 0.5);
+            --accent-color: #34495e;
         }
 
         body {
@@ -43,8 +44,23 @@
 
         .header h1 {
             color: var(--primary-color);
-            margin: 0;
+            margin: 0 0 1rem 0;
             font-weight: 500;
+        }
+
+        .foreground-app {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .foreground-app i {
+            font-size: 1.1rem;
         }
 
         .input-group {
@@ -277,6 +293,10 @@
     <div class="container">
         <div class="header">
             <h1><i class="fas fa-mobile-alt"></i> ADB Web Interface</h1>
+            <div id="foregroundApp" class="foreground-app">
+                <i class="fas fa-mobile-screen"></i>
+                <span>No app in foreground</span>
+            </div>
         </div>
         
         <div class="input-group">
@@ -363,32 +383,45 @@
             }
         }
 
-        function connectDevice() {
-            const ipAddress = document.getElementById('ipAddress').value;
-            if (!ipAddress) {
-                showStatus('Please enter an IP address', true);
-                return;
-            }
-
+        function loadSpecificConfig(name) {
             showLoading(true);
-            fetch('/connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `ip_address=${encodeURIComponent(ipAddress)}`
-            })
+            stopForegroundAppPolling();  // Stop polling when loading new config
+
+            fetch(`/load-config?name=${encodeURIComponent(name)}`)
             .then(response => response.json())
             .then(data => {
                 showLoading(false);
-                showStatus(data.message, data.status === 'error');
                 if (data.status === 'success') {
-                    loadApps();
+                    const ipAddress = document.getElementById('ipAddress');
+                    ipAddress.value = data.config.ip_address;
+                    
+                    // Display the apps
+                    const appList = document.getElementById('appList');
+                    appList.innerHTML = '<h2><i class="fas fa-mobile-screen"></i> Saved Apps</h2>';
+                    data.config.apps.forEach(app => {
+                        const div = document.createElement('div');
+                        div.className = 'app-item';
+                        div.innerHTML = `
+                            <i class="fas fa-cube"></i>
+                            <span>${app.name}</span>
+                        `;
+                        div.setAttribute('data-package', app.package);
+                        div.onclick = () => launchApp(app.package);
+                        div.title = 'Click to launch app';
+                        appList.appendChild(div);
+                    });
+                    showStatus(`Configuration "${name}" loaded successfully`);
+                    closeLoadConfigModal();
+                    
+                    // Connect to device after loading config
+                    connectDevice();
+                } else {
+                    showStatus(data.message, true);
                 }
             })
             .catch(error => {
                 showLoading(false);
-                showStatus('Failed to connect: ' + error, true);
+                showStatus('Failed to load configuration: ' + error, true);
             });
         }
 
@@ -538,43 +571,7 @@
             });
         }
 
-        function loadSpecificConfig(name) {
-            showLoading(true);
-            fetch(`/load-config?name=${encodeURIComponent(name)}`)
-            .then(response => response.json())
-            .then(data => {
-                showLoading(false);
-                if (data.status === 'success') {
-                    const ipAddress = document.getElementById('ipAddress');
-                    ipAddress.value = data.config.ip_address;
-                    
-                    // Display the apps
-                    const appList = document.getElementById('appList');
-                    appList.innerHTML = '<h2><i class="fas fa-mobile-screen"></i> Saved Apps</h2>';
-                    data.config.apps.forEach(app => {
-                        const div = document.createElement('div');
-                        div.className = 'app-item';
-                        div.innerHTML = `
-                            <i class="fas fa-cube"></i>
-                            <span>${app.name}</span>
-                        `;
-                        div.setAttribute('data-package', app.package);
-                        div.onclick = () => launchApp(app.package);
-                        div.title = 'Click to launch app';
-                        appList.appendChild(div);
-                    });
-                    showStatus(`Configuration "${name}" loaded successfully`);
-                    closeLoadConfigModal();
-                } else {
-                    showStatus(data.message, true);
-                }
-            })
-            .catch(error => {
-                showLoading(false);
-                showStatus('Failed to load configuration: ' + error, true);
-            });
-        }
-
+        
         function deleteConfig(name) {
             if (!confirm(`Are you sure you want to delete configuration "${name}"?`)) {
                 return;
@@ -608,6 +605,70 @@
                 connectDevice();
             }
         });
+
+        // Polling for foreground app
+        let foregroundAppInterval = null;
+
+        function updateForegroundApp() {
+            fetch('/foreground-app')
+            .then(response => response.json())
+            .then(data => {
+                const foregroundDiv = document.getElementById('foregroundApp');
+                if (data.status === 'success') {
+                    foregroundDiv.innerHTML = `
+                        <i class="fas fa-mobile-screen"></i>
+                        <span>${data.name}</span>
+                    `;
+                }
+            })
+            .catch(() => {
+                // Silently fail on errors
+            });
+        }
+
+        function startForegroundAppPolling() {
+            stopForegroundAppPolling();  // Clear any existing interval
+            updateForegroundApp();  // Initial update
+            foregroundAppInterval = setInterval(updateForegroundApp, 2000);  // Poll every 2 seconds
+        }
+
+        function stopForegroundAppPolling() {
+            if (foregroundAppInterval) {
+                clearInterval(foregroundAppInterval);
+                foregroundAppInterval = null;
+            }
+        }
+
+        // Start polling when device connects
+        function connectDevice() {
+            const ipAddress = document.getElementById('ipAddress').value;
+            if (!ipAddress) {
+                showStatus('Please enter an IP address', true);
+                return;
+            }
+
+            showLoading(true);
+            fetch('/connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ip_address=${encodeURIComponent(ipAddress)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                showStatus(data.message, data.status === 'error');
+                if (data.status === 'success') {
+                    loadApps();
+                    startForegroundAppPolling();  // Start polling for foreground app
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                showStatus('Failed to connect: ' + error, true);
+            });
+        }
     </script>
 </body>
 </html>
