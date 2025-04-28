@@ -161,25 +161,8 @@ def get_foreground_app():
                     break
 
     if package_name:
-        # Get all possible package metadata
-        pkg_info = run_adb_command(['shell', f'dumpsys package {package_name}; pm dump {package_name}'])
-        app_name = package_name  # Default to package name
-        
-        if pkg_info:
-            # Try different label patterns
-            for pattern in [
-                r'application-label-en:\'([^\']+)\'',
-                r'application-label:\'([^\']+)\'',
-                r'applicationInfo.*?label=\'([^\']+)\''
-            ]:
-                match = re.search(pattern, pkg_info)
-                if match:
-                    app_name = match.group(1)
-                    break
-                    
-            if app_name == package_name:
-                # Make package name more readable if no label found
-                app_name = package_name.split('.')[-1].replace('_', ' ').title()
+        # Just return the package name itself
+        app_name = package_name
 
         return jsonify({
             'status': 'success',
