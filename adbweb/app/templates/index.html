@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADB Web Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            width: 200px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .app-list {
+            margin-top: 20px;
+        }
+        .app-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin: 5px 0;
+            cursor: pointer;
+            background-color: white;
+        }
+        .app-item:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ADB Web Interface</h1>
+        
+        <div class="input-group">
+            <input type="text" id="ipAddress" placeholder="Enter IP address">
+            <button onclick="connectDevice()">Connect</button>
+        </div>
+        
+        <div id="status" style="display: none;"></div>
+        
+        <div class="app-list" id="appList"></div>
+    </div>
+
+    <script>
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+            statusDiv.style.display = 'block';
+        }
+
+        function connectDevice() {
+            const ipAddress = document.getElementById('ipAddress').value;
+            if (!ipAddress) {
+                showStatus('Please enter an IP address', true);
+                return;
+            }
+
+            fetch('/connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ip_address=${encodeURIComponent(ipAddress)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showStatus(data.message, data.status === 'error');
+                if (data.status === 'success') {
+                    loadApps();
+                }
+            })
+            .catch(error => {
+                showStatus('Failed to connect: ' + error, true);
+            });
+        }
+
+        function loadApps() {
+            fetch('/list-apps')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const appList = document.getElementById('appList');
+                    appList.innerHTML = '<h2>Installed Apps</h2>';
+                    data.apps.forEach(app => {
+                        const div = document.createElement('div');
+                        div.className = 'app-item';
+                        div.textContent = app.name;
+                        div.onclick = () => launchApp(app.package);
+                        appList.appendChild(div);
+                    });
+                } else {
+                    showStatus(data.message, true);
+                }
+            })
+            .catch(error => {
+                showStatus('Failed to load apps: ' + error, true);
+            });
+        }
+
+        function launchApp(packageName) {
+            fetch('/launch-app', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `package=${encodeURIComponent(packageName)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showStatus(data.message, data.status === 'error');
+            })
+            .catch(error => {
+                showStatus('Failed to launch app: ' + error, true);
+            });
+        }
+    </script>
+</body>
+</html>
