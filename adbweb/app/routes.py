@@ -35,31 +35,37 @@ def connect_device():
 
 @app.route('/list-apps')
 def list_apps():
-    # Get list of installed packages
-    output = run_adb_command(['shell', 'pm', 'list', 'packages', '-3'])
+    # Get list of installed packages with their names
+    name_cmd = (
+        "for pkg in $(pm list packages -3 | cut -d':' -f2); do "
+        "label=$(dumpsys package $pkg | grep -E 'application-label:|applicationInfo.*label=' | head -n1); "
+        "if [ -n \"$label\" ]; then "
+        "echo \"$label : $pkg\"; "
+        "else "
+        "echo \"$pkg : $pkg\"; "
+        "fi; "
+        "done"
+    )
+    output = run_adb_command(['shell', name_cmd])
     
     if not output:
         return jsonify({'status': 'error', 'message': 'Failed to get app list'})
     
-    # Parse package names
-    packages = [line.split(':')[1] for line in output.splitlines() if ':' in line]
-    
-    # Get app names using application-label
     apps = []
-    # Run the command in shell to get app names
-    name_cmd = "pm list packages -3 | while read -r line; do pkg=$(echo $line | cut -d':' -f2); app=$(dumpsys package \"$pkg\" | grep -m 1 \"application-label:\" | cut -d':' -f2); echo \"$app : $pkg\"; done"
-    output = run_adb_command(['shell', name_cmd])
     
     if output:
         for line in output.splitlines():
             if ':' in line:
                 parts = line.split(' : ')
                 if len(parts) == 2:
-                    name = parts[0].strip().strip("'")  # Remove quotes and whitespace
                     package = parts[1].strip()
-                    
-                    if not name:  # Fallback to package name if label is empty
-                        name = package.split('.')[-1].capitalize()
+                    # Extract name from label output
+                    label_match = re.search(r'(?:application-label:|applicationInfo.*?label=)\'([^\']+)\'', parts[0])
+                    if label_match:
+                        name = label_match.group(1)
+                    else:
+                        # Fallback to making package name more readable
+                        name = package.split('.')[-1].replace('_', ' ').title()
                         
                     apps.append({'package': package, 'name': name})
     
@@ -117,17 +123,64 @@ def launch_app():
 
 @app.route('/foreground-app')
 def get_foreground_app():
-    # Get the current foreground app using dumpsys
-    cmd = "dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' | cut -d'/' -f1 | grep -o '[^ ]*$'"
-    result = run_adb_command(['shell', cmd])
+    # Try to get the current foreground activity
+    result = run_adb_command(['shell', 'dumpsys activity activities'])
     
-    if result:
-        # Get the app name for this package
-        package_name = result.strip()
-        name_cmd = f"dumpsys package \"{package_name}\" | grep -m 1 \"application-label:\" | cut -d':' -f2"
-        name_result = run_adb_command(['shell', name_cmd])
+    if not result:
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to get activity state'
+        })
+
+    # Try both activity manager and window service
+    package_name = None
+    
+    # Activity manager check
+    activity_patterns = [
+        r'mResumedActivity.*?([a-zA-Z0-9_.]+)/[^}]*',
+        r'mFocusedActivity.*?([a-zA-Z0-9_.]+)/[^}]*'
+    ]
+    for pattern in activity_patterns:
+        match = re.search(pattern, result)
+        if match:
+            package_name = match.group(1)
+            break
+            
+    # Window service check if activity manager failed
+    if not package_name:
+        window_result = run_adb_command(['shell', 'dumpsys window displays'])
+        if window_result:
+            window_patterns = [
+                r'mCurrentFocus.*?([a-zA-Z0-9_.]+)/[^}]*',
+                r'focusedApp.*?([a-zA-Z0-9_.]+)/[^}]*'
+            ]
+            for pattern in window_patterns:
+                match = re.search(pattern, window_result)
+                if match:
+                    package_name = match.group(1)
+                    break
+
+    if package_name:
+        # Get all possible package metadata
+        pkg_info = run_adb_command(['shell', f'dumpsys package {package_name}; pm dump {package_name}'])
+        app_name = package_name  # Default to package name
         
-        app_name = name_result.strip().strip("'") if name_result else package_name
+        if pkg_info:
+            # Try different label patterns
+            for pattern in [
+                r'application-label-en:\'([^\']+)\'',
+                r'application-label:\'([^\']+)\'',
+                r'applicationInfo.*?label=\'([^\']+)\''
+            ]:
+                match = re.search(pattern, pkg_info)
+                if match:
+                    app_name = match.group(1)
+                    break
+                    
+            if app_name == package_name:
+                # Make package name more readable if no label found
+                app_name = package_name.split('.')[-1].replace('_', ' ').title()
+
         return jsonify({
             'status': 'success',
             'package': package_name,
@@ -136,5 +189,5 @@ def get_foreground_app():
     
     return jsonify({
         'status': 'error',
-        'message': 'Failed to get foreground app'
+        'message': 'No foreground app found'
     })

@@ -609,6 +609,12 @@
         // Polling for foreground app
         let foregroundAppInterval = null;
 
+        let consecutiveErrors = 0;
+        const MAX_ERRORS = 3;
+        const INITIAL_INTERVAL = 1000;
+        const MAX_INTERVAL = 5000;
+        let currentInterval = INITIAL_INTERVAL;
+
         function updateForegroundApp() {
             fetch('/foreground-app')
             .then(response => response.json())
@@ -619,24 +625,61 @@
                         <i class="fas fa-mobile-screen"></i>
                         <span>${data.name}</span>
                     `;
+                    foregroundDiv.style.backgroundColor = '#27ae60';
+                    consecutiveErrors = 0;
+                    currentInterval = INITIAL_INTERVAL;
+                } else {
+                    handleForegroundError();
                 }
             })
-            .catch(() => {
-                // Silently fail on errors
-            });
+            .catch(handleForegroundError);
+        }
+
+        function handleForegroundError() {
+            const foregroundDiv = document.getElementById('foregroundApp');
+            foregroundDiv.innerHTML = `
+                <i class="fas fa-mobile-screen"></i>
+                <span>Checking app...</span>
+            `;
+            foregroundDiv.style.backgroundColor = 'var(--accent-color)';
+            
+            consecutiveErrors++;
+            if (consecutiveErrors >= MAX_ERRORS) {
+                currentInterval = Math.min(currentInterval * 2, MAX_INTERVAL);
+            }
         }
 
         function startForegroundAppPolling() {
             stopForegroundAppPolling();  // Clear any existing interval
+            consecutiveErrors = 0;
+            currentInterval = INITIAL_INTERVAL;
             updateForegroundApp();  // Initial update
-            foregroundAppInterval = setInterval(updateForegroundApp, 2000);  // Poll every 2 seconds
+            
+            // Use a recursive setTimeout instead of setInterval for dynamic timing
+            function poll() {
+                foregroundAppInterval = setTimeout(() => {
+                    updateForegroundApp();
+                    poll();  // Schedule next update
+                }, currentInterval);
+            }
+            
+            poll();  // Start polling
         }
 
         function stopForegroundAppPolling() {
             if (foregroundAppInterval) {
-                clearInterval(foregroundAppInterval);
+                clearTimeout(foregroundAppInterval);
                 foregroundAppInterval = null;
             }
+            // Reset monitoring state
+            consecutiveErrors = 0;
+            currentInterval = INITIAL_INTERVAL;
+            const foregroundDiv = document.getElementById('foregroundApp');
+            foregroundDiv.innerHTML = `
+                <i class="fas fa-mobile-screen"></i>
+                <span>No app in foreground</span>
+            `;
+            foregroundDiv.style.backgroundColor = 'var(--accent-color)';
         }
 
         // Start polling when device connects
