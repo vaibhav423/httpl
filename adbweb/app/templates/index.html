@@ -160,16 +160,46 @@
             padding: 1rem;
             border-radius: 8px;
             box-shadow: var(--card-shadow);
-            cursor: pointer;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 1rem;
         }
 
         .app-item:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .app-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex: 1;
+        }
+
+        .app-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .action-btn {
+            padding: 0.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .action-btn.warning {
+            background-color: #f39c12;
+        }
+
+        .action-btn.danger {
+            background-color: var(--error-color);
         }
 
         .app-item i {
@@ -402,12 +432,23 @@
                         const div = document.createElement('div');
                         div.className = 'app-item';
                         div.innerHTML = `
-                            <i class="fas fa-cube"></i>
-                            <span>${app.name}</span>
+                            <div class="app-info">
+                                <i class="fas fa-cube"></i>
+                                <span title="Package: ${app.package}">${app.package}</span>
+                            </div>
+                            <div class="app-actions">
+                                <button onclick="launchApp('${app.package}')" title="Launch App" class="action-btn">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button onclick="forceStopApp('${app.package}')" title="Force Stop" class="action-btn warning">
+                                    <i class="fas fa-stop"></i>
+                                </button>
+                                <button onclick="confirmUninstall('${app.package}')" title="Uninstall" class="action-btn danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         `;
                         div.setAttribute('data-package', app.package);
-                        div.onclick = () => launchApp(app.package);
-                        div.title = 'Click to launch app';
                         appList.appendChild(div);
                     });
                     showStatus(`Configuration "${name}" loaded successfully`);
@@ -438,12 +479,23 @@
                         const div = document.createElement('div');
                         div.className = 'app-item';
                         div.innerHTML = `
-                            <i class="fas fa-cube"></i>
-                            <span>${app.name}</span>
+                            <div class="app-info">
+                                <i class="fas fa-cube"></i>
+                                <span title="Package: ${app.package}">${app.package}</span>
+                            </div>
+                            <div class="app-actions">
+                                <button onclick="launchApp('${app.package}')" title="Launch App" class="action-btn">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button onclick="forceStopApp('${app.package}')" title="Force Stop" class="action-btn warning">
+                                    <i class="fas fa-stop"></i>
+                                </button>
+                                <button onclick="confirmUninstall('${app.package}')" title="Uninstall" class="action-btn danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         `;
                         div.setAttribute('data-package', app.package);
-                        div.onclick = () => launchApp(app.package);
-                        div.title = 'Click to launch app';
                         appList.appendChild(div);
                     });
                 } else {
@@ -680,6 +732,55 @@
                 <span>No app in foreground</span>
             `;
             foregroundDiv.style.backgroundColor = 'var(--accent-color)';
+        }
+
+        function forceStopApp(packageName) {
+            showLoading(true);
+            fetch('/force-stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `package=${encodeURIComponent(packageName)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                showStatus(data.message, data.status === 'error');
+            })
+            .catch(error => {
+                showLoading(false);
+                showStatus('Failed to force stop app: ' + error, true);
+            });
+        }
+
+        function confirmUninstall(packageName) {
+            if (confirm(`Are you sure you want to uninstall ${packageName}?`)) {
+                uninstallApp(packageName);
+            }
+        }
+
+        function uninstallApp(packageName) {
+            showLoading(true);
+            fetch('/uninstall', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `package=${encodeURIComponent(packageName)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                showStatus(data.message, data.status === 'error');
+                if (data.status === 'success') {
+                    loadApps();  // Refresh app list
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                showStatus('Failed to uninstall app: ' + error, true);
+            });
         }
 
         // Start polling when device connects

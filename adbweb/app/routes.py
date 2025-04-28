@@ -97,15 +97,47 @@ def load_device_config():
         return jsonify({'status': 'success', 'configs': config})
     return jsonify({'status': 'error', 'message': 'No configuration found'})
 
+@app.route('/force-stop', methods=['POST'])
+def force_stop_app():
+    package_name = request.form.get('package')
+    if not package_name:
+        return jsonify({'status': 'error', 'message': 'Package name is required'})
+    
+    result = run_adb_command(['shell', 'am', 'force-stop', package_name])
+    return jsonify({
+        'status': 'success',
+        'message': f'Force stopped {package_name}'
+    })
+
+@app.route('/uninstall', methods=['POST'])
+def uninstall_app():
+    package_name = request.form.get('package')
+    if not package_name:
+        return jsonify({'status': 'error', 'message': 'Package name is required'})
+    
+    result = run_adb_command(['shell', 'pm', 'uninstall', package_name])
+    if 'Success' in result:
+        return jsonify({
+            'status': 'success',
+            'message': f'Uninstalled {package_name}'
+        })
+    return jsonify({
+        'status': 'error',
+        'message': f'Failed to uninstall: {result}'
+    })
+
 @app.route('/delete-config', methods=['POST'])
 def delete_device_config():
     name = request.form.get('name')
     if not name:
         return jsonify({'status': 'error', 'message': 'Configuration name is required'})
     
-    if delete_config(name):
-        return jsonify({'status': 'success', 'message': f'Configuration "{name}" deleted successfully'})
-    return jsonify({'status': 'error', 'message': f'Failed to delete configuration "{name}"'})
+    try:
+        if delete_config(name):
+            return jsonify({'status': 'success', 'message': f'Configuration "{name}" deleted successfully'})
+        return jsonify({'status': 'error', 'message': f'Failed to delete configuration "{name}"'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/launch-app', methods=['POST'])
 def launch_app():
