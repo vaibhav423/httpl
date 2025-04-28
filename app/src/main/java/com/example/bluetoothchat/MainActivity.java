@@ -82,6 +82,8 @@ public class MainActivity extends AppCompatActivity {
             if (ACTION_TALK.equals(action)) {
                 String message = intent.getStringExtra(EXTRA_MESSAGE);
                 if (message != null && bluetoothService != null) {
+                    messageAdapter.addMessage(message, true);
+                    messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
                     bluetoothService.sendMessage(message);
                 }
             }
@@ -95,7 +97,10 @@ public class MainActivity extends AppCompatActivity {
             if (ACTION_LISTEN.equals(action)) {
                 String message = intent.getStringExtra(EXTRA_MESSAGE);
                 if (message != null) {
-                    messageAdapter.addMessage("Received: " + message);
+                    runOnUiThread(() -> {
+                        messageAdapter.addMessage(message, false);
+                        messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+                    });
                 }
             }
         }
@@ -130,10 +135,13 @@ public class MainActivity extends AppCompatActivity {
         sendButton.setOnClickListener(v -> {
             String message = messageInput.getText().toString().trim();
             if (!message.isEmpty() && bluetoothService != null) {
+                messageAdapter.addMessage(message, true);
                 Intent intent = new Intent(ACTION_TALK);
                 intent.putExtra(EXTRA_MESSAGE, message);
                 sendBroadcast(intent);
                 messageInput.setText("");
+                // Scroll to bottom
+                messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
             }
         });
 
@@ -142,7 +150,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupRecyclerView() {
         messageAdapter = new MessageAdapter();
-        messageRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
+        layoutManager.setStackFromEnd(true);
+        messageRecyclerView.setLayoutManager(layoutManager);
         messageRecyclerView.setAdapter(messageAdapter);
     }
 
@@ -222,44 +232,46 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeBluetoothService() {
         try {
-            bluetoothService = new BluetoothService(
-                this,
-                message -> {
-                    Intent intent = new Intent(ACTION_LISTEN);
-                    intent.putExtra(EXTRA_MESSAGE, message);
-                    sendBroadcast(intent);
-                },
-                (status, device) -> runOnUiThread(() -> {
-                    switch (status) {
-                        case NONE:
-                            connectionStatus.setText("Status: Disconnected");
-                            connectedDevice.setText("No device connected");
-                            sendButton.setEnabled(false);
-                            scanButton.setEnabled(true);
-                            break;
-                        case LISTENING:
-                            connectionStatus.setText("Status: Waiting for connection");
-                            connectedDevice.setText("No device connected");
-                            sendButton.setEnabled(false);
-                            scanButton.setEnabled(true);
-                            break;
-                        case CONNECTING:
-                            connectionStatus.setText("Status: Connecting...");
-                            connectedDevice.setText(device != null ? 
-                                "Connecting to: " + device.getName() : "");
-                            sendButton.setEnabled(false);
-                            scanButton.setEnabled(false);
-                            break;
-                        case CONNECTED:
-                            connectionStatus.setText("Status: Connected");
-                            connectedDevice.setText(device != null ? 
-                                "Connected to: " + device.getName() : "");
-                            sendButton.setEnabled(true);
-                            scanButton.setEnabled(true);
-                            break;
-                    }
-                })
-            );
+            // Create message and connection callbacks
+            BluetoothService.MessageCallback messageCallback = message -> {
+                Intent intent = new Intent(ACTION_LISTEN);
+                intent.putExtra(EXTRA_MESSAGE, message);
+                sendBroadcast(intent);
+            };
+
+            BluetoothService.ConnectionCallback connectionCallback = (status, device) -> runOnUiThread(() -> {
+                switch (status) {
+                    case NONE:
+                        connectionStatus.setText("Status: Disconnected");
+                        connectedDevice.setText("No device connected");
+                        sendButton.setEnabled(false);
+                        scanButton.setEnabled(true);
+                        break;
+                    case LISTENING:
+                        connectionStatus.setText("Status: Waiting for connection");
+                        connectedDevice.setText("No device connected");
+                        sendButton.setEnabled(false);
+                        scanButton.setEnabled(true);
+                        break;
+                    case CONNECTING:
+                        connectionStatus.setText("Status: Connecting...");
+                        connectedDevice.setText(device != null ? 
+                            "Connecting to: " + device.getName() : "");
+                        sendButton.setEnabled(false);
+                        scanButton.setEnabled(false);
+                        break;
+                    case CONNECTED:
+                        connectionStatus.setText("Status: Connected");
+                        connectedDevice.setText(device != null ? 
+                            "Connected to: " + device.getName() : "");
+                        sendButton.setEnabled(true);
+                        scanButton.setEnabled(true);
+                        break;
+                }
+            });
+            
+            // Initialize Bluetooth service with callbacks
+            bluetoothService = new BluetoothService(this, messageCallback, connectionCallback);
             
             // Only register receivers if service initialization succeeded
             if (bluetoothService != null) {

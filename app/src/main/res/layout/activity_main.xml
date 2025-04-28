@@ -43,6 +43,12 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginBottom="16dp"
+        android:clipToPadding="false"
+        android:padding="8dp"
+        android:scrollbars="vertical"
+        android:fadeScrollbars="false"
+        android:stackFromBottom="true"
+        android:transcriptMode="alwaysScroll"
         app:layout_constraintTop_toBottomOf="@id/statusLayout"
         app:layout_constraintBottom_toTopOf="@id/messageInput" />
 
@@ -54,6 +60,8 @@
         android:hint="Type a message"
         android:inputType="text"
         android:maxLines="1"
+        android:padding="12dp"
+        android:background="@drawable/message_background"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@id/sendButton"
         app:layout_constraintStart_toStartOf="parent" />
