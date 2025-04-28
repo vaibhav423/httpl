@@ -4,75 +4,223 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ADB Web Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #2ecc71;
+            --error-color: #e74c3c;
+            --text-color: #333;
+            --bg-color: #f8f9fa;
+            --card-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
         }
+
         .container {
-            background-color: #f5f5f5;
-            padding: 20px;
-            border-radius: 5px;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
         }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            margin: 0;
+            font-weight: 500;
+        }
+
         .input-group {
-            margin-bottom: 20px;
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            align-items: center;
+            justify-content: center;
         }
+
         input[type="text"] {
-            padding: 8px;
-            width: 200px;
-            margin-right: 10px;
+            padding: 0.8rem 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            width: 300px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
         }
+
+        input[type="text"]:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
         button {
-            padding: 8px 15px;
-            background-color: #4CAF50;
+            padding: 0.8rem 1.5rem;
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            border-radius: 3px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: transform 0.2s ease, background-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+
         button:hover {
-            background-color: #45a049;
+            background-color: #357abd;
+            transform: translateY(-1px);
         }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button i {
+            font-size: 1.1rem;
+        }
+
         .status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 3px;
+            margin: 1rem 0;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
+
+        .status.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
         .success {
-            background-color: #dff0d8;
-            color: #3c763d;
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
         }
+
         .error {
-            background-color: #f2dede;
-            color: #a94442;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
+
         .app-list {
-            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
         }
+
         .app-item {
-            padding: 10px;
-            border: 1px solid #ddd;
-            margin: 5px 0;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: var(--card-shadow);
             cursor: pointer;
-            background-color: white;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
+
         .app-item:hover {
-            background-color: #f0f0f0;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .app-item i {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .loading.visible {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            input[type="text"] {
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .app-list {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>ADB Web Interface</h1>
+        <div class="header">
+            <h1><i class="fas fa-mobile-alt"></i> ADB Web Interface</h1>
+        </div>
         
         <div class="input-group">
-            <input type="text" id="ipAddress" placeholder="Enter IP address">
-            <button onclick="connectDevice()">Connect</button>
+            <input type="text" id="ipAddress" placeholder="Enter device IP address (e.g., 192.168.1.100:5555)">
+            <button onclick="connectDevice()">
+                <i class="fas fa-plug"></i>
+                Connect Device
+            </button>
         </div>
         
         <div id="status" style="display: none;"></div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Processing request...</p>
+        </div>
         
         <div class="app-list" id="appList"></div>
     </div>
@@ -83,6 +231,26 @@
             statusDiv.textContent = message;
             statusDiv.className = 'status ' + (isError ? 'error' : 'success');
             statusDiv.style.display = 'block';
+            statusDiv.classList.add('visible');
+            
+            // Auto-hide success messages after 5 seconds
+            if (!isError) {
+                setTimeout(() => {
+                    statusDiv.classList.remove('visible');
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 300);
+                }, 5000);
+            }
+        }
+
+        function showLoading(show = true) {
+            const loading = document.getElementById('loading');
+            if (show) {
+                loading.classList.add('visible');
+            } else {
+                loading.classList.remove('visible');
+            }
         }
 
         function connectDevice() {
@@ -92,6 +260,7 @@
                 return;
             }
 
+            showLoading(true);
             fetch('/connect', {
                 method: 'POST',
                 headers: {
@@ -101,28 +270,36 @@
             })
             .then(response => response.json())
             .then(data => {
+                showLoading(false);
                 showStatus(data.message, data.status === 'error');
                 if (data.status === 'success') {
                     loadApps();
                 }
             })
             .catch(error => {
+                showLoading(false);
                 showStatus('Failed to connect: ' + error, true);
             });
         }
 
         function loadApps() {
+            showLoading(true);
             fetch('/list-apps')
             .then(response => response.json())
             .then(data => {
+                showLoading(false);
                 if (data.status === 'success') {
                     const appList = document.getElementById('appList');
-                    appList.innerHTML = '<h2>Installed Apps</h2>';
+                    appList.innerHTML = '<h2><i class="fas fa-mobile-screen"></i> Installed Apps</h2>';
                     data.apps.forEach(app => {
                         const div = document.createElement('div');
                         div.className = 'app-item';
-                        div.textContent = app.name;
+                        div.innerHTML = `
+                            <i class="fas fa-cube"></i>
+                            <span>${app.name}</span>
+                        `;
                         div.onclick = () => launchApp(app.package);
+                        div.title = 'Click to launch app';
                         appList.appendChild(div);
                     });
                 } else {
@@ -130,11 +307,13 @@
                 }
             })
             .catch(error => {
+                showLoading(false);
                 showStatus('Failed to load apps: ' + error, true);
             });
         }
 
         function launchApp(packageName) {
+            showLoading(true);
             fetch('/launch-app', {
                 method: 'POST',
                 headers: {
@@ -144,12 +323,21 @@
             })
             .then(response => response.json())
             .then(data => {
+                showLoading(false);
                 showStatus(data.message, data.status === 'error');
             })
             .catch(error => {
+                showLoading(false);
                 showStatus('Failed to launch app: ' + error, true);
             });
         }
+
+        // Add Enter key support for the IP address input
+        document.getElementById('ipAddress').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                connectDevice();
+            }
+        });
     </script>
 </body>
 </html>
