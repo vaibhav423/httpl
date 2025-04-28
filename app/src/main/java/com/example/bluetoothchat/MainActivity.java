@@ -181,10 +181,10 @@ public class MainActivity extends AppCompatActivity {
             // Only register receivers if service initialization succeeded
             if (bluetoothService != null) {
                 IntentFilter talkFilter = new IntentFilter(ACTION_TALK);
-                registerReceiver(talkReceiver, talkFilter);
+                registerReceiver(talkReceiver, talkFilter, Context.RECEIVER_NOT_EXPORTED);
 
                 IntentFilter listenFilter = new IntentFilter(ACTION_LISTEN);
-                registerReceiver(listenReceiver, listenFilter);
+                registerReceiver(listenReceiver, listenFilter, Context.RECEIVER_NOT_EXPORTED);
             } else {
                 Toast.makeText(this, "Failed to initialize Bluetooth service", Toast.LENGTH_SHORT).show();
                 finish();

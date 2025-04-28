@@ -94,24 +94,35 @@ public class BluetoothService {
                 return;
             }
 
-            BluetoothSocket socket;
+            BluetoothSocket socket = null;
+            
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    socket = serverSocket.accept();
-                } catch (IOException e) {
-                    Log.e(TAG, "Socket's accept() method failed", e);
-                    break;
-                }
-
-                if (socket != null) {
-                    connected(socket);
-                    try {
-                        serverSocket.close();
-                    } catch (IOException e) {
-                        Log.e(TAG, "Could not close the connect socket", e);
+                    Log.d(TAG, "Waiting for Bluetooth connection...");
+                    socket = serverSocket.accept(10000); // 10 second timeout
+                    
+                    if (socket != null) {
+                        Log.d(TAG, "Connection accepted");
+                        connected(socket);
+                        try {
+                            serverSocket.close();
+                        } catch (IOException e) {
+                            Log.e(TAG, "Could not close the connect socket", e);
+                        }
+                        break;
                     }
+                } catch (IOException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("timeout")) {
+                        Log.d(TAG, "Connection timeout, retrying...");
+                        continue;
+                    }
+                    Log.e(TAG, "Fatal error in accept()", e);
                     break;
                 }
+            }
+            
+            if (Thread.currentThread().isInterrupted()) {
+                Log.d(TAG, "AcceptThread interrupted");
             }
         }
 
