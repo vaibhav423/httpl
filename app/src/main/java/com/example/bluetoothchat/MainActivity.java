@@ -2,6 +2,7 @@ package com.example.bluetoothchat;
 
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,9 +11,12 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
@@ -30,9 +34,27 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothService bluetoothService;
     private EditText messageInput;
     private Button sendButton;
+    private Button scanButton;
+    private TextView connectionStatus;
+    private TextView connectedDevice;
     private RecyclerView messageRecyclerView;
     private MessageAdapter messageAdapter;
     private BluetoothAdapter bluetoothAdapter;
+    private DeviceAdapter deviceAdapter;
+    private AlertDialog scanDialog;
+    
+    private final BroadcastReceiver scanReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                if (device != null && deviceAdapter != null) {
+                    deviceAdapter.addDevice(device);
+                }
+            }
+        }
+    };
 
     private final ActivityResultLauncher<Intent> enableBluetoothLauncher = registerForActivityResult(
         new ActivityResultContracts.StartActivityForResult(),
@@ -79,23 +101,34 @@ public class MainActivity extends AppCompatActivity {
 
         initializeViews();
         setupRecyclerView();
+        setupScanDialog();
         checkBluetoothRequirements();
+        
+        // Register for broadcasts when a device is discovered
+        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+        registerReceiver(scanReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
     }
 
     private void initializeViews() {
         messageInput = findViewById(R.id.messageInput);
         sendButton = findViewById(R.id.sendButton);
+        scanButton = findViewById(R.id.scanButton);
+        connectionStatus = findViewById(R.id.connectionStatus);
+        connectedDevice = findViewById(R.id.connectedDevice);
         messageRecyclerView = findViewById(R.id.messageRecyclerView);
 
+        sendButton.setEnabled(false);
         sendButton.setOnClickListener(v -> {
             String message = messageInput.getText().toString().trim();
-            if (!message.isEmpty()) {
+            if (!message.isEmpty() && bluetoothService != null) {
                 Intent intent = new Intent(ACTION_TALK);
                 intent.putExtra(EXTRA_MESSAGE, message);
                 sendBroadcast(intent);
                 messageInput.setText("");
             }
         });
+
+        scanButton.setOnClickListener(v -> showDeviceScanDialog());
     }
 
     private void setupRecyclerView() {
@@ -172,11 +205,44 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeBluetoothService() {
         try {
-            bluetoothService = new BluetoothService(this, message -> {
-                Intent intent = new Intent(ACTION_LISTEN);
-                intent.putExtra(EXTRA_MESSAGE, message);
-                sendBroadcast(intent);
-            });
+            bluetoothService = new BluetoothService(
+                this,
+                message -> {
+                    Intent intent = new Intent(ACTION_LISTEN);
+                    intent.putExtra(EXTRA_MESSAGE, message);
+                    sendBroadcast(intent);
+                },
+                (status, device) -> runOnUiThread(() -> {
+                    switch (status) {
+                        case NONE:
+                            connectionStatus.setText("Status: Disconnected");
+                            connectedDevice.setText("No device connected");
+                            sendButton.setEnabled(false);
+                            scanButton.setEnabled(true);
+                            break;
+                        case LISTENING:
+                            connectionStatus.setText("Status: Waiting for connection");
+                            connectedDevice.setText("No device connected");
+                            sendButton.setEnabled(false);
+                            scanButton.setEnabled(true);
+                            break;
+                        case CONNECTING:
+                            connectionStatus.setText("Status: Connecting...");
+                            connectedDevice.setText(device != null ? 
+                                "Connecting to: " + device.getName() : "");
+                            sendButton.setEnabled(false);
+                            scanButton.setEnabled(false);
+                            break;
+                        case CONNECTED:
+                            connectionStatus.setText("Status: Connected");
+                            connectedDevice.setText(device != null ? 
+                                "Connected to: " + device.getName() : "");
+                            sendButton.setEnabled(true);
+                            scanButton.setEnabled(true);
+                            break;
+                    }
+                })
+            );
             
             // Only register receivers if service initialization succeeded
             if (bluetoothService != null) {
@@ -185,6 +251,8 @@ public class MainActivity extends AppCompatActivity {
 
                 IntentFilter listenFilter = new IntentFilter(ACTION_LISTEN);
                 registerReceiver(listenReceiver, listenFilter, Context.RECEIVER_NOT_EXPORTED);
+
+                bluetoothService.start(); // Start the Bluetooth service after initialization
             } else {
                 Toast.makeText(this, "Failed to initialize Bluetooth service", Toast.LENGTH_SHORT).show();
                 finish();
@@ -196,17 +264,60 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void setupScanDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_device_list, null);
+        RecyclerView deviceList = dialogView.findViewById(R.id.deviceList);
+        View scanProgress = dialogView.findViewById(R.id.scanProgress);
+        TextView emptyText = dialogView.findViewById(R.id.emptyText);
+
+        deviceAdapter = new DeviceAdapter(device -> {
+            if (bluetoothAdapter.isDiscovering()) {
+                bluetoothAdapter.cancelDiscovery();
+            }
+            bluetoothService.connect(device);
+            scanDialog.dismiss();
+        });
+
+        deviceList.setLayoutManager(new LinearLayoutManager(this));
+        deviceList.setAdapter(deviceAdapter);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setNegativeButton("Cancel", (dialog, which) -> {
+                if (bluetoothAdapter.isDiscovering()) {
+                    bluetoothAdapter.cancelDiscovery();
+                }
+            });
+
+        scanDialog = builder.create();
+    }
+
+    private void showDeviceScanDialog() {
+        deviceAdapter.clearDevices();
+        scanDialog.show();
+        
+        if (bluetoothAdapter.isDiscovering()) {
+            bluetoothAdapter.cancelDiscovery();
+        }
+        
+        bluetoothAdapter.startDiscovery();
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
         try {
             unregisterReceiver(talkReceiver);
             unregisterReceiver(listenReceiver);
+            unregisterReceiver(scanReceiver);
         } catch (IllegalArgumentException e) {
             // Receivers might not be registered if Bluetooth initialization failed
         }
         if (bluetoothService != null) {
             bluetoothService.stop();
+        }
+        if (bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
+            bluetoothAdapter.cancelDiscovery();
         }
     }
 }
