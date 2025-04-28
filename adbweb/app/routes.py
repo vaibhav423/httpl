@@ -44,48 +44,59 @@ def list_apps():
     # Parse package names
     packages = [line.split(':')[1] for line in output.splitlines() if ':' in line]
     
-    # Get app names for each package
+    # Get app names using application-label
     apps = []
-    for package in packages:
-        # Get the app's label (name)
-        name_output = run_adb_command(['shell', 'dumpsys', 'package', package, '|', 'grep', 'android.intent.action.MAIN'])
-        if not name_output:
-            continue
-
-        label_cmd = ['shell', 'cmd', 'package', 'resolve-activity', '--brief', package]
-        label_output = run_adb_command(label_cmd)
-        
-        if label_output and 'label=' in label_output:
-            name = label_output.split('label=')[-1].split(' ')[0].strip()
-        else:
-            # Fallback to package name if can't get app name
-            name = package.split('.')[-1].capitalize()
-            
-        apps.append({'package': package, 'name': name})
+    # First get a list of all application labels
+    label_cmd = f"pm list packages -3 | while read -r line; do pkg=$(echo $line | cut -d':' -f2); label=$(dumpsys package \"$pkg\" | grep -m 1 'application-label:' | cut -d':' -f2 | tr -d \"'\"); echo \"$pkg|$label\"; done"
+    output = run_adb_command(['shell', label_cmd])
+    
+    if output:
+        for line in output.splitlines():
+            parts = line.split('|')
+            if len(parts) == 2:
+                package = parts[0].strip()
+                name = parts[1].strip()
+                if not name:  # Fallback to package name if label is empty
+                    name = package.split('.')[-1].capitalize()
+                apps.append({'package': package, 'name': name})
     
     return jsonify({'status': 'success', 'apps': apps})
 
 @app.route('/save-config', methods=['POST'])
 def save_device_config():
+    name = request.form.get('name')
     ip_address = request.form.get('ip_address')
     apps = request.form.get('apps')
     
-    if not ip_address or not apps:
+    if not name or not ip_address or not apps:
         return jsonify({'status': 'error', 'message': 'Missing required data'})
     
     try:
         apps = eval(apps)  # Convert string representation of list to actual list
-        save_config(ip_address, apps)
-        return jsonify({'status': 'success', 'message': 'Configuration saved successfully'})
+        save_config(name, ip_address, apps)
+        return jsonify({'status': 'success', 'message': f'Configuration "{name}" saved successfully'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Failed to save configuration: {str(e)}'})
 
-@app.route('/load-config')
+@app.route('/load-config', methods=['GET'])
 def load_device_config():
-    config = load_config()
+    name = request.args.get('name')
+    config = load_config(name)
     if config:
-        return jsonify({'status': 'success', 'config': config})
-    return jsonify({'status': 'error', 'message': 'No saved configuration found'})
+        if name:
+            return jsonify({'status': 'success', 'config': config})
+        return jsonify({'status': 'success', 'configs': config})
+    return jsonify({'status': 'error', 'message': 'No configuration found'})
+
+@app.route('/delete-config', methods=['POST'])
+def delete_device_config():
+    name = request.form.get('name')
+    if not name:
+        return jsonify({'status': 'error', 'message': 'Configuration name is required'})
+    
+    if delete_config(name):
+        return jsonify({'status': 'success', 'message': f'Configuration "{name}" deleted successfully'})
+    return jsonify({'status': 'error', 'message': f'Failed to delete configuration "{name}"'})
 
 @app.route('/launch-app', methods=['POST'])
 def launch_app():
