@@ -46,19 +46,22 @@ def list_apps():
     
     # Get app names using application-label
     apps = []
-    # First get a list of all application labels
-    label_cmd = f"pm list packages -3 | while read -r line; do pkg=$(echo $line | cut -d':' -f2); label=$(dumpsys package \"$pkg\" | grep -m 1 'application-label:' | cut -d':' -f2 | tr -d \"'\"); echo \"$pkg|$label\"; done"
-    output = run_adb_command(['shell', label_cmd])
+    # Run the command in shell to get app names
+    name_cmd = "pm list packages -3 | while read -r line; do pkg=$(echo $line | cut -d':' -f2); app=$(dumpsys package \"$pkg\" | grep -m 1 \"application-label:\" | cut -d':' -f2); echo \"$app : $pkg\"; done"
+    output = run_adb_command(['shell', name_cmd])
     
     if output:
         for line in output.splitlines():
-            parts = line.split('|')
-            if len(parts) == 2:
-                package = parts[0].strip()
-                name = parts[1].strip()
-                if not name:  # Fallback to package name if label is empty
-                    name = package.split('.')[-1].capitalize()
-                apps.append({'package': package, 'name': name})
+            if ':' in line:
+                parts = line.split(' : ')
+                if len(parts) == 2:
+                    name = parts[0].strip().strip("'")  # Remove quotes and whitespace
+                    package = parts[1].strip()
+                    
+                    if not name:  # Fallback to package name if label is empty
+                        name = package.split('.')[-1].capitalize()
+                        
+                    apps.append({'package': package, 'name': name})
     
     return jsonify({'status': 'success', 'apps': apps})
 
