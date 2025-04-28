@@ -1,5 +1,6 @@
 from flask import render_template, request, jsonify
 from app import app
+from app.config import save_config, load_config
 import subprocess
 import re
 
@@ -46,13 +47,45 @@ def list_apps():
     # Get app names for each package
     apps = []
     for package in packages:
-        name_output = run_adb_command(['shell', 'dumpsys', 'package', package, '|', 'grep', 'versionName'])
-        name = package  # Default to package name if we can't get the app name
-        if name_output:
-            name = f"{package} ({name_output.strip()})"
+        # Get the app's label (name)
+        name_output = run_adb_command(['shell', 'dumpsys', 'package', package, '|', 'grep', 'android.intent.action.MAIN'])
+        if not name_output:
+            continue
+
+        label_cmd = ['shell', 'cmd', 'package', 'resolve-activity', '--brief', package]
+        label_output = run_adb_command(label_cmd)
+        
+        if label_output and 'label=' in label_output:
+            name = label_output.split('label=')[-1].split(' ')[0].strip()
+        else:
+            # Fallback to package name if can't get app name
+            name = package.split('.')[-1].capitalize()
+            
         apps.append({'package': package, 'name': name})
     
     return jsonify({'status': 'success', 'apps': apps})
+
+@app.route('/save-config', methods=['POST'])
+def save_device_config():
+    ip_address = request.form.get('ip_address')
+    apps = request.form.get('apps')
+    
+    if not ip_address or not apps:
+        return jsonify({'status': 'error', 'message': 'Missing required data'})
+    
+    try:
+        apps = eval(apps)  # Convert string representation of list to actual list
+        save_config(ip_address, apps)
+        return jsonify({'status': 'success', 'message': 'Configuration saved successfully'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to save configuration: {str(e)}'})
+
+@app.route('/load-config')
+def load_device_config():
+    config = load_config()
+    if config:
+        return jsonify({'status': 'success', 'config': config})
+    return jsonify({'status': 'error', 'message': 'No saved configuration found'})
 
 @app.route('/launch-app', methods=['POST'])
 def launch_app():

@@ -96,6 +96,14 @@
             font-size: 1.1rem;
         }
 
+        button.secondary {
+            background-color: var(--secondary-color);
+        }
+
+        button.secondary:hover {
+            background-color: #27ae60;
+        }
+
         .status {
             margin: 1rem 0;
             padding: 1rem;
@@ -213,6 +221,14 @@
                 <i class="fas fa-plug"></i>
                 Connect Device
             </button>
+            <button onclick="saveConfig()" class="secondary">
+                <i class="fas fa-save"></i>
+                Save Config
+            </button>
+            <button onclick="loadConfig()" class="secondary">
+                <i class="fas fa-folder-open"></i>
+                Load Config
+            </button>
         </div>
         
         <div id="status" style="display: none;"></div>
@@ -298,6 +314,7 @@
                             <i class="fas fa-cube"></i>
                             <span>${app.name}</span>
                         `;
+                        div.setAttribute('data-package', app.package);
                         div.onclick = () => launchApp(app.package);
                         div.title = 'Click to launch app';
                         appList.appendChild(div);
@@ -329,6 +346,71 @@
             .catch(error => {
                 showLoading(false);
                 showStatus('Failed to launch app: ' + error, true);
+            });
+        }
+
+        function saveConfig() {
+            const ipAddress = document.getElementById('ipAddress').value;
+            const appListDiv = document.getElementById('appList');
+            const apps = Array.from(appListDiv.querySelectorAll('.app-item')).map(item => {
+                return {
+                    name: item.querySelector('span').textContent,
+                    package: item.getAttribute('data-package')
+                };
+            });
+
+            showLoading(true);
+            fetch('/save-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ip_address=${encodeURIComponent(ipAddress)}&apps=${encodeURIComponent(JSON.stringify(apps))}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                showStatus(data.message, data.status === 'error');
+            })
+            .catch(error => {
+                showLoading(false);
+                showStatus('Failed to save configuration: ' + error, true);
+            });
+        }
+
+        function loadConfig() {
+            showLoading(true);
+            fetch('/load-config')
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                if (data.status === 'success') {
+                    const ipAddress = document.getElementById('ipAddress');
+                    ipAddress.value = data.config.ip_address;
+                    
+                    // Display the apps
+                    const appList = document.getElementById('appList');
+                    appList.innerHTML = '<h2><i class="fas fa-mobile-screen"></i> Saved Apps</h2>';
+                    data.config.apps.forEach(app => {
+                        const div = document.createElement('div');
+                        div.className = 'app-item';
+                        div.innerHTML = `
+                            <i class="fas fa-cube"></i>
+                            <span>${app.name}</span>
+                        `;
+                        div.setAttribute('data-package', app.package);
+                        div.onclick = () => launchApp(app.package);
+                        div.title = 'Click to launch app';
+                        appList.appendChild(div);
+                    });
+                    showStatus('Configuration loaded successfully');
+                } else {
+                    showStatus(data.message, true);
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                showStatus('Failed to load configuration: ' + error, true);
             });
         }
 
