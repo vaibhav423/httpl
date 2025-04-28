@@ -1,9 +1,11 @@
 package com.example.bluetoothchat;
 
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import java.text.SimpleDateFormat;
@@ -28,36 +30,44 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
         }
     }
 
+    @NonNull
     @Override
-    public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+    public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.item_message, parent, false);
         return new ViewHolder(view);
     }
 
     @Override
-    public void onBindViewHolder(ViewHolder holder, int position) {
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Message message = messages.get(position);
-        // Set message text and timestamp
+        
         holder.messageText.setText(message.text);
         holder.timestamp.setText(timeFormat.format(new Date(message.timestamp)));
-        
-        // Set background and alignment based on message type
+
+        // Set background based on message type
         int backgroundRes = message.isSent ? 
             R.drawable.sent_message_background : 
             R.drawable.received_message_background;
         holder.messageText.setBackgroundResource(backgroundRes);
-        
-        // Align sent messages to the right, received to the left
-        ConstraintLayout.LayoutParams params = 
+
+        // Configure LayoutParams for message text
+        ConstraintLayout.LayoutParams textParams = 
             (ConstraintLayout.LayoutParams) holder.messageText.getLayoutParams();
-        params.horizontalBias = message.isSent ? 1.0f : 0.0f;
-        holder.messageText.setLayoutParams(params);
-        
-        // Align timestamp with message
-        params = (ConstraintLayout.LayoutParams) holder.timestamp.getLayoutParams();
-        params.horizontalBias = message.isSent ? 1.0f : 0.0f;
-        holder.timestamp.setLayoutParams(params);
+        textParams.horizontalBias = message.isSent ? 1.0f : 0.0f;
+        int margin = holder.itemView.getResources()
+                .getDimensionPixelSize(R.dimen.message_margin_horizontal);
+        textParams.setMarginStart(message.isSent ? margin * 2 : margin / 2);
+        textParams.setMarginEnd(message.isSent ? margin / 2 : margin * 2);
+        holder.messageText.setLayoutParams(textParams);
+
+        // Configure LayoutParams for timestamp
+        ConstraintLayout.LayoutParams timeParams = 
+            (ConstraintLayout.LayoutParams) holder.timestamp.getLayoutParams();
+        timeParams.horizontalBias = message.isSent ? 1.0f : 0.0f;
+        timeParams.setMarginStart(message.isSent ? margin * 2 : margin / 2);
+        timeParams.setMarginEnd(message.isSent ? margin / 2 : margin * 2);
+        holder.timestamp.setLayoutParams(timeParams);
     }
 
     @Override
@@ -66,9 +76,8 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.ViewHold
     }
 
     public void addMessage(String text, boolean isSent) {
-        int position = messages.size();
         messages.add(new Message(text, isSent));
-        notifyItemInserted(position);
+        notifyItemInserted(messages.size() - 1);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

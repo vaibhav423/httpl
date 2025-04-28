@@ -3,33 +3,37 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingVertical="4dp">
 
     <TextView
         android:id="@+id/timestamp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="12sp"
+        android:textSize="@dimen/timestamp_text_size"
         android:textColor="#666666"
         android:layout_marginBottom="2dp"
         app:layout_constraintBottom_toTopOf="@id/messageText"
-        app:layout_constraintStart_toStartOf="@id/messageText"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="2dp" />
 
     <TextView
         android:id="@+id/messageText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:maxWidth="240dp"
-        android:padding="12dp"
-        android:textSize="16sp"
+        android:maxWidth="@dimen/message_max_width"
+        android:minWidth="48dp"
+        android:padding="@dimen/message_padding"
+        android:textSize="@dimen/message_text_size"
         android:textColor="@android:color/black"
-        app:layout_constraintHorizontal_bias="0"
+        android:textIsSelectable="true"
+        app:layout_constraintTop_toBottomOf="@id/timestamp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_marginBottom="2dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

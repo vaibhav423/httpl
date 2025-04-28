@@ -5,7 +5,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import java.util.Set;
+import com.example.bluetoothchat.BluetoothService.ConnectionStatus;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
@@ -25,11 +25,10 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String ACTION_TALK = "action:talk";
-    private static final String ACTION_LISTEN = "action:listen";
-    private static final String EXTRA_MESSAGE = "message";
+    private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 1;
 
     private BluetoothService bluetoothService;
@@ -43,8 +42,8 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothAdapter bluetoothAdapter;
     private DeviceAdapter deviceAdapter;
     private AlertDialog scanDialog;
-    
-    private final BroadcastReceiver scanReceiver = new BroadcastReceiver() {
+
+    private final BroadcastReceiver discoveryReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
@@ -52,12 +51,22 @@ public class MainActivity extends AppCompatActivity {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 if (device != null && deviceAdapter != null) {
                     deviceAdapter.addDevice(device);
-                    scanDialog.findViewById(R.id.emptyText).setVisibility(View.GONE);
+                    if (scanDialog != null && scanDialog.isShowing()) {
+                        scanDialog.findViewById(R.id.emptyText).setVisibility(View.GONE);
+                    }
                 }
             } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                scanDialog.findViewById(R.id.scanProgress).setVisibility(View.GONE);
-                if (deviceAdapter.getItemCount() == 0) {
-                    scanDialog.findViewById(R.id.emptyText).setVisibility(View.VISIBLE);
+                if (scanDialog != null && scanDialog.isShowing()) {
+                    View scanProgress = scanDialog.findViewById(R.id.scanProgress);
+                    if (scanProgress != null) {
+                        scanProgress.setVisibility(View.GONE);
+                    }
+                    if (deviceAdapter.getItemCount() == 0) {
+                        View emptyText = scanDialog.findViewById(R.id.emptyText);
+                        if (emptyText != null) {
+                            emptyText.setVisibility(View.VISIBLE);
+                        }
+                    }
                 }
             }
         }
@@ -75,52 +84,21 @@ public class MainActivity extends AppCompatActivity {
         }
     );
 
-    private final BroadcastReceiver talkReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (ACTION_TALK.equals(action)) {
-                String message = intent.getStringExtra(EXTRA_MESSAGE);
-                if (message != null && bluetoothService != null) {
-                    messageAdapter.addMessage(message, true);
-                    messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
-                    bluetoothService.sendMessage(message);
-                }
-            }
-        }
-    };
-
-    private final BroadcastReceiver listenReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (ACTION_LISTEN.equals(action)) {
-                String message = intent.getStringExtra(EXTRA_MESSAGE);
-                if (message != null) {
-                    runOnUiThread(() -> {
-                        messageAdapter.addMessage(message, false);
-                        messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
-                    });
-                }
-            }
-        }
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Register for device discovery results
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BluetoothDevice.ACTION_FOUND);
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+        registerReceiver(discoveryReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+
         initializeViews();
         setupRecyclerView();
         setupScanDialog();
         checkBluetoothRequirements();
-        
-        // Register for broadcasts when a device is discovered
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(BluetoothDevice.ACTION_FOUND);
-        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
-        registerReceiver(scanReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
     }
 
     private void initializeViews() {
@@ -134,14 +112,13 @@ public class MainActivity extends AppCompatActivity {
         sendButton.setEnabled(false);
         sendButton.setOnClickListener(v -> {
             String message = messageInput.getText().toString().trim();
-            if (!message.isEmpty() && bluetoothService != null) {
+            if (!message.isEmpty() && bluetoothService != null && bluetoothService.isConnected()) {
+                bluetoothService.sendMessage(message);
                 messageAdapter.addMessage(message, true);
-                Intent intent = new Intent(ACTION_TALK);
-                intent.putExtra(EXTRA_MESSAGE, message);
-                sendBroadcast(intent);
                 messageInput.setText("");
-                // Scroll to bottom
                 messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+            } else if (bluetoothService == null || !bluetoothService.isConnected()) {
+                Toast.makeText(this, "Not connected to any device", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -154,6 +131,67 @@ public class MainActivity extends AppCompatActivity {
         layoutManager.setStackFromEnd(true);
         messageRecyclerView.setLayoutManager(layoutManager);
         messageRecyclerView.setAdapter(messageAdapter);
+    }
+
+    private void setupScanDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_device_list, null);
+        RecyclerView deviceList = dialogView.findViewById(R.id.deviceList);
+        View scanProgress = dialogView.findViewById(R.id.scanProgress);
+        TextView emptyText = dialogView.findViewById(R.id.emptyText);
+
+        deviceAdapter = new DeviceAdapter(device -> {
+            if (bluetoothAdapter.isDiscovering()) {
+                bluetoothAdapter.cancelDiscovery();
+            }
+            bluetoothService.connect(device);
+            scanDialog.dismiss();
+        });
+
+        deviceList.setLayoutManager(new LinearLayoutManager(this));
+        deviceList.setAdapter(deviceAdapter);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+            .setTitle("Select a Device")
+            .setView(dialogView)
+            .setNegativeButton("Cancel", (dialog, which) -> {
+                if (bluetoothAdapter.isDiscovering()) {
+                    bluetoothAdapter.cancelDiscovery();
+                }
+            });
+
+        scanDialog = builder.create();
+    }
+
+    private void showDeviceScanDialog() {
+        deviceAdapter.clearDevices();
+        scanDialog.show();
+        
+        View scanProgress = scanDialog.findViewById(R.id.scanProgress);
+        TextView emptyText = scanDialog.findViewById(R.id.emptyText);
+        
+        scanProgress.setVisibility(View.VISIBLE);
+        emptyText.setVisibility(View.GONE);
+        
+        // Show paired devices first
+        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+        if (pairedDevices != null && !pairedDevices.isEmpty()) {
+            for (BluetoothDevice device : pairedDevices) {
+                deviceAdapter.addDevice(device);
+            }
+            emptyText.setVisibility(View.GONE);
+        }
+        
+        // Cancel ongoing discovery and start new one
+        if (bluetoothAdapter.isDiscovering()) {
+            bluetoothAdapter.cancelDiscovery();
+        }
+        
+        if (deviceAdapter.getItemCount() == 0) {
+            emptyText.setVisibility(View.VISIBLE);
+        }
+        
+        // Start device discovery
+        bluetoothAdapter.startDiscovery();
     }
 
     private void checkBluetoothRequirements() {
@@ -232,136 +270,60 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeBluetoothService() {
         try {
-            // Create message and connection callbacks
-            BluetoothService.MessageCallback messageCallback = message -> {
-                Intent intent = new Intent(ACTION_LISTEN);
-                intent.putExtra(EXTRA_MESSAGE, message);
-                sendBroadcast(intent);
-            };
-
-            BluetoothService.ConnectionCallback connectionCallback = (status, device) -> runOnUiThread(() -> {
-                switch (status) {
-                    case NONE:
-                        connectionStatus.setText("Status: Disconnected");
-                        connectedDevice.setText("No device connected");
-                        sendButton.setEnabled(false);
-                        scanButton.setEnabled(true);
-                        break;
-                    case LISTENING:
-                        connectionStatus.setText("Status: Waiting for connection");
-                        connectedDevice.setText("No device connected");
-                        sendButton.setEnabled(false);
-                        scanButton.setEnabled(true);
-                        break;
-                    case CONNECTING:
-                        connectionStatus.setText("Status: Connecting...");
-                        connectedDevice.setText(device != null ? 
-                            "Connecting to: " + device.getName() : "");
-                        sendButton.setEnabled(false);
-                        scanButton.setEnabled(false);
-                        break;
-                    case CONNECTED:
-                        connectionStatus.setText("Status: Connected");
-                        connectedDevice.setText(device != null ? 
-                            "Connected to: " + device.getName() : "");
-                        sendButton.setEnabled(true);
-                        scanButton.setEnabled(true);
-                        break;
-                }
-            });
+            bluetoothService = new BluetoothService(
+                this,
+                message -> runOnUiThread(() -> {
+                    messageAdapter.addMessage(message, false);
+                    messageRecyclerView.smoothScrollToPosition(messageAdapter.getItemCount() - 1);
+                }),
+                (status, device) -> runOnUiThread(() -> {
+                    switch (status) {
+                        case NONE:
+                            connectionStatus.setText("Status: Disconnected");
+                            connectedDevice.setText("No device connected");
+                            sendButton.setEnabled(false);
+                            scanButton.setEnabled(true);
+                            break;
+                        case LISTENING:
+                            connectionStatus.setText("Status: Waiting for connection");
+                            connectedDevice.setText("No device connected");
+                            sendButton.setEnabled(false);
+                            scanButton.setEnabled(true);
+                            break;
+                        case CONNECTING:
+                            connectionStatus.setText("Status: Connecting...");
+                            connectedDevice.setText(device != null ? 
+                                "Connecting to: " + device.getName() : "");
+                            sendButton.setEnabled(false);
+                            scanButton.setEnabled(false);
+                            break;
+                        case CONNECTED:
+                            connectionStatus.setText("Status: Connected");
+                            connectedDevice.setText(device != null ? 
+                                "Connected to: " + device.getName() : "");
+                            sendButton.setEnabled(true);
+                            scanButton.setEnabled(true);
+                            break;
+                    }
+                })
+            );
             
-            // Initialize Bluetooth service with callbacks
-            bluetoothService = new BluetoothService(this, messageCallback, connectionCallback);
-            
-            // Only register receivers if service initialization succeeded
-            if (bluetoothService != null) {
-                IntentFilter talkFilter = new IntentFilter(ACTION_TALK);
-                registerReceiver(talkReceiver, talkFilter, Context.RECEIVER_NOT_EXPORTED);
-
-                IntentFilter listenFilter = new IntentFilter(ACTION_LISTEN);
-                registerReceiver(listenReceiver, listenFilter, Context.RECEIVER_NOT_EXPORTED);
-
-                bluetoothService.start(); // Start the Bluetooth service after initialization
-            } else {
-                Toast.makeText(this, "Failed to initialize Bluetooth service", Toast.LENGTH_SHORT).show();
-                finish();
-            }
+            bluetoothService.start();
         } catch (Exception e) {
-            Log.e("MainActivity", "Error initializing Bluetooth service", e);
-            Toast.makeText(this, "Failed to initialize Bluetooth service: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "Error initializing Bluetooth service", e);
+            Toast.makeText(this, "Failed to initialize Bluetooth service: " + e.getMessage(), 
+                Toast.LENGTH_SHORT).show();
             finish();
         }
-    }
-
-    private void setupScanDialog() {
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_device_list, null);
-        RecyclerView deviceList = dialogView.findViewById(R.id.deviceList);
-        View scanProgress = dialogView.findViewById(R.id.scanProgress);
-        TextView emptyText = dialogView.findViewById(R.id.emptyText);
-
-        deviceAdapter = new DeviceAdapter(device -> {
-            if (bluetoothAdapter.isDiscovering()) {
-                bluetoothAdapter.cancelDiscovery();
-            }
-            bluetoothService.connect(device);
-            scanDialog.dismiss();
-        });
-
-        deviceList.setLayoutManager(new LinearLayoutManager(this));
-        deviceList.setAdapter(deviceAdapter);
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setNegativeButton("Cancel", (dialog, which) -> {
-                if (bluetoothAdapter.isDiscovering()) {
-                    bluetoothAdapter.cancelDiscovery();
-                }
-            });
-
-        scanDialog = builder.create();
-    }
-
-    private void showDeviceScanDialog() {
-        deviceAdapter.clearDevices();
-        scanDialog.show();
-        
-        View scanProgress = scanDialog.findViewById(R.id.scanProgress);
-        TextView emptyText = scanDialog.findViewById(R.id.emptyText);
-        
-        // Show progress and hide empty text initially
-        scanProgress.setVisibility(View.VISIBLE);
-        emptyText.setVisibility(View.GONE);
-        
-        // Add paired devices first
-        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
-        if (pairedDevices.size() > 0) {
-            for (BluetoothDevice device : pairedDevices) {
-                deviceAdapter.addDevice(device);
-            }
-        }
-        
-        // Start discovery
-        if (bluetoothAdapter.isDiscovering()) {
-            bluetoothAdapter.cancelDiscovery();
-        }
-        
-        // Show empty text if no devices found
-        if (deviceAdapter.getItemCount() == 0) {
-            emptyText.setVisibility(View.VISIBLE);
-        }
-        
-        bluetoothAdapter.startDiscovery();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         try {
-            unregisterReceiver(talkReceiver);
-            unregisterReceiver(listenReceiver);
-            unregisterReceiver(scanReceiver);
+            unregisterReceiver(discoveryReceiver);
         } catch (IllegalArgumentException e) {
-            // Receivers might not be registered if Bluetooth initialization failed
+            // Receiver might not be registered
         }
         if (bluetoothService != null) {
             bluetoothService.stop();
