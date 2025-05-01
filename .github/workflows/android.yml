@@ -47,15 +47,37 @@ jobs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/tailscale-android/**/*.gradle*', '**/tailscale-android/**/gradle-wrapper.properties') }}
+        key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
-          
+
+    - name: Set up tool directory
+      run: |
+        mkdir -p tool
+        echo '#!/bin/bash' > tool/go
+        echo 'exec go "$@"' >> tool/go
+        chmod +x tool/go
+
+    - name: Build AAR Library
+      env:
+        TS_USE_TOOLCHAIN: "1"
+        GOBIN: ${{ github.workspace }}/tailscale-android/android/build/go/bin
+      run: |
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PWD/tool:$PATH
+        mkdir -p android/build/go/bin
+        go install golang.org/x/mobile/cmd/gobind@latest
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        $GOBIN/gomobile init
+        make libtailscale version
+        
     - name: Build APK
-      run: make apk
+      run: |
+        cd android
+        chmod +x ./gradlew
+        ./gradlew clean assembleDebug --stacktrace
       
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-release
-        path: tailscale-android/android/build/outputs/apk/release/**/*.apk
+        name: app-debug
+        path: tailscale-android/android/build/outputs/apk/debug/android-debug.apk
