@@ -9,175 +9,91 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./tailscale-android
     env:
-      ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+      ANDROID_HOME: ${{ github.workspace }}/tailscale-android/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/tailscale-android/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/tailscale-android/android-sdk/ndk/23.1.7779620
+      GOPATH: ${{ github.workspace }}/go
+      TS_USE_TOOLCHAIN: "1"
 
     steps:
+    - name: Define error handler
+      run: |
+        error_handler() {
+          echo "Error occurred in ${1:-unknown step}"
+          echo "Directory structure:"
+          ls -R ./tailscale-android
+          echo "Environment:"
+          env | sort
+          return 1
+        }
     - uses: actions/checkout@v4
     
-    - name: Set up JDK
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
         go-version: '1.21'
         
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
     - name: Set up Android SDK
       run: |
-        mkdir -p $ANDROID_HOME/cmdline-tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip
-        mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-        rm commandlinetools-linux-9477386_latest.zip
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
+        cd tailscale-android || error_handler "cd to tailscale-android"
+        mkdir -p android-sdk/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip || error_handler "download SDK tools"
+        unzip -q commandlinetools-linux-9477386_latest.zip || error_handler "unzip SDK tools"
+        mv cmdline-tools android-sdk/cmdline-tools/latest || error_handler "move cmdline-tools"
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-34' 'extras;android;m2repository' 'ndk;23.1.7779620' 'platform-tools' 'build-tools;34.0.0'
-      
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "ndk;23.1.7779620"
+
     - name: Cache Gradle packages
       uses: actions/cache@v4
       with:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/tailscale-android/**/*.gradle*') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    - name: Debug Environment
+    - name: Run make androidsdk
       run: |
-        echo "Current directory: $PWD"
-        echo "ANDROID_HOME: $ANDROID_HOME"
-        echo "Files in current directory:"
-        ls -la
-        echo "Android SDK tools:"
-        ls -la $ANDROID_HOME/cmdline-tools/latest/bin || echo "cmdline-tools not found"
-        ls -la $ANDROID_HOME/platform-tools || echo "platform-tools not found"
+        cd tailscale-android || error_handler "cd to tailscale-android"
+        echo "Makefile contents:"
+        cat Makefile
+        echo "Directory structure:"
+        ls -R
+        echo "Running make androidsdk..."
+        make androidsdk || { echo "make androidsdk failed. Running with verbose output..."; make -d androidsdk; exit 1; }
 
-    - name: Set up Go tools
+    - name: Build Debug APK
       run: |
-        echo "Setting up Go tools..."
-        mkdir -p tool
-        echo '#!/bin/bash' > tool/go
-        {
-          echo 'set -e'
-          echo 'timestamp() { date "+%Y-%m-%d %H:%M:%S"; }'
-          echo 'log() { echo "[$({ timestamp; } 2>/dev/null)] $*"; }'
-          echo 'log "Starting go wrapper"'
-          echo 'log "Arguments: $*"'
-          echo 'log "Working directory: $PWD"'
-          echo 'log "PATH: $PATH"'
-          echo 'log "GOROOT: $GOROOT"'
-          echo 'log "GOPATH: $GOPATH"'
-          echo 'log "Locating go executable..."'
-          echo 'GO_BIN=$(which go || true)'
-          echo 'if [ -z "$GO_BIN" ]; then'
-          echo '  log "ERROR: go binary not found in PATH"'
-          echo '  exit 1'
-          echo 'fi'
-          echo 'log "Using go from: $GO_BIN"'
-          echo 'log "Go version: $($GO_BIN version)"'
-          echo 'log "Executing: $GO_BIN $*"'
-          echo '$GO_BIN "$@"'
-          echo 'status=$?'
-          echo 'log "Command completed with status: $status"'
-          echo 'exit $status'
-        } >> tool/go
-        chmod +x tool/go
-        echo "Go tools directory:"
-        ls -la tool
-        echo "Go wrapper contents:"
-        cat tool/go
-        echo "Testing go wrapper..."
-        ./tool/go version
-
-    - name: Install Go mobile tools
-      run: |
-        export GOPATH=${{ github.workspace }}/go
-        export GOBIN=${{ github.workspace }}/tailscale-android/android/build/go/bin
-        echo "GOPATH=$GOPATH"
-        echo "GOBIN=$GOBIN"
-        echo "Installing Go mobile tools..."
-        mkdir -p android/build/go/bin
-        go install golang.org/x/mobile/cmd/gobind@latest
-        go install golang.org/x/mobile/cmd/gomobile@latest
-        echo "Installed tools:"
-        ls -la $GOBIN
-
-    - name: Debug build environment
-      run: |
-        echo "Full directory tree:"
-        find ${{ github.workspace }} -maxdepth 3 -type d
-        echo "Full environment:"
-        env | sort
-        
-    - name: Initialize Go mobile
-      run: |
-        export GOPATH=${{ github.workspace }}/go
-        export GOBIN=${{ github.workspace }}/tailscale-android/android/build/go/bin
-        export ANDROID_NDK_HOME=${{ github.workspace }}/android-sdk/ndk/23.1.7779620
-        echo "[$(date)] === Initializing Go mobile ==="
-        # First verify go is working
-        echo "[$(date)] Go version:"
-        go version
-        
-        # Check NDK installation
-        echo "[$(date)] Checking NDK directories:"
-        for d in "$ANDROID_NDK" "$ANDROID_NDK_HOME" "$NDK" "$NDK_ROOT"; do
-          echo "Looking in $d:"
-          ls -la "$d" || echo "Not found"
-        done
-        
-        # Check gomobile exists
-        echo "[$(date)] Checking gomobile binary:"
-        ls -la "$GOBIN/gomobile"
-        
-        # Double check gomobile installation
-        echo "[$(date)] Installing latest gomobile..."
-        go install golang.org/x/mobile/cmd/gomobile@latest
-        
-        echo "[$(date)] Initializing gomobile with explicit paths..."
-        "$GOBIN/gomobile" init -ndk="$NDK_ROOT" -v
-
-    - name: Build AAR Library
-      run: |
-        export GOPATH=${{ github.workspace }}/go
-        export GOBIN=${{ github.workspace }}/tailscale-android/android/build/go/bin
-        export ANDROID_NDK_HOME=${{ github.workspace }}/android-sdk/ndk/23.1.7779620
-        export TS_USE_TOOLCHAIN=1
-        export PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PWD}/tool:${PATH}"
-        echo "[$(date)] Starting AAR build..."
+        cd tailscale-android || error_handler "cd to tailscale-android"
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+        go version || error_handler "check go"
         echo "Current environment:"
         env | sort
-        make libtailscale version || {
-            echo "[$(date)] Build failed. Debug info:"
-            echo "Current directory contents:"
-            ls -la
-            echo "Android SDK contents:"
-            ls -la $ANDROID_HOME
-            echo "Tool wrapper log:"
-            cat tool/go
-            echo "Makefile contents:"
-            cat Makefile
+        echo "Building APK..."
+        ls -la android/
+        echo "Running make apk with debug output..."
+        make -d apk || {
+            echo "APK build failed. Debug info:"
+            echo "android/ directory contents:"
+            ls -la android/
+            echo "android/build/ contents (if exists):"
+            ls -la android/build/ || true
+            echo "Last 100 lines of Android Studio's idea.log (if exists):"
+            tail -n 100 ~/.AndroidStudio*/system/log/idea.log 2>/dev/null || true
             exit 1
         }
-        echo "[$(date)] AAR build completed"
-        
-    - name: Build APK
-      run: |
-        cd android
-        chmod +x ./gradlew
-        ./gradlew clean assembleDebug --stacktrace
-      
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: tailscale-android/android/build/outputs/apk/debug/android-debug.apk
+        path: tailscale-android/tailscale-debug.apk
