@@ -14,132 +14,98 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        android-api-level: ['34', '33', '32']  # Test on latest 3 API levels
-    env:
-      ANDROID_HOME: ${{ github.workspace }}/tailscale-android/android-sdk
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/tailscale-android/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/tailscale-android/android-sdk/ndk/23.1.7779620
-      GOPATH: ${{ github.workspace }}/go
-      TS_USE_TOOLCHAIN: "1"
 
     steps:
-    - name: Create build utilities
-      run: |
-        mkdir -p $HOME/buildutils
-        cat > $HOME/buildutils/functions.sh << 'EOF'
-        error_handler() {
-          echo "Error occurred in ${1:-unknown step}"
-          echo "Working directory: $PWD"
-          echo "Directory structure:"
-          ls -R ./
-          echo "Environment variables:"
-          env | sort
-          return 1
-        }
-
-        debug_info() {
-          echo "Debug info for: $1"
-          echo "Current directory: $PWD"
-          echo "Files:"
-          ls -la
-          if [ -f "Makefile" ]; then
-            echo "Makefile contents:"
-            cat Makefile
-          fi
-        }
-        EOF
-        chmod +x $HOME/buildutils/functions.sh
     - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.21'
-        
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
 
-    - name: Set up Android SDK
-      run: |
-        source $HOME/buildutils/functions.sh
-        cd tailscale-android || error_handler "cd to tailscale-android"
-        debug_info "Android SDK setup"
-        mkdir -p android-sdk/cmdline-tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip || error_handler "download SDK tools"
-        unzip -q commandlinetools-linux-9477386_latest.zip || error_handler "unzip SDK tools"
-        mv cmdline-tools android-sdk/cmdline-tools/latest || error_handler "move cmdline-tools"
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-${{ matrix.android-api-level }}" "build-tools;${{ matrix.android-api-level }}.0.0" "platform-tools" "ndk;23.1.7779620"
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-    - name: Cache Gradle packages
+    - name: Cache Go modules
       uses: actions/cache@v4
       with:
         path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/tailscale-android/**/*.gradle*') }}
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-gradle-
+          ${{ runner.os }}-go-
 
-    - name: Run make androidsdk
-      run: |
-        source $HOME/buildutils/functions.sh
-        cd tailscale-android || error_handler "cd to tailscale-android"
-        debug_info "Before androidsdk"
-        echo "Makefile contents:"
-        cat Makefile
-        echo "Directory structure:"
-        ls -R
-        echo "Running make androidsdk..."
-        make androidsdk || { echo "make androidsdk failed. Running with verbose output..."; make -d androidsdk; exit 1; }
+    - name: Cache Docker layers
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
 
-    - name: Build Debug APK
-      id: build
+    - name: Copy build scripts
       run: |
-        source $HOME/buildutils/functions.sh
-        cd tailscale-android || error_handler "cd to tailscale-android"
-        debug_info "APK build"
-        echo "Current environment:"
-        env | sort
-        
-        echo "Verifying build prerequisites..."
-        go version || error_handler "check go version"
-        java -version || error_handler "check java version"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --version || error_handler "check sdkmanager"
-        
-        echo "Building APK..."
-        ls -la android/
-        echo "Running make apk with debug output..."
-        make -d apk || {
-            echo "APK build failed. Debug info:"
-            echo "Build environment:"
-            debug_info "Build failure state"
-            echo "Android SDK contents:"
-            ls -la $ANDROID_HOME || true
-            echo "Last build logs:"
-            find . -name "*.log" -type f -exec tail -n 50 {} \;
-            error_handler "APK build failed"
-        }
+        cd tailscale-android
+        mkdir -p scripts
+        cp docker/DockerFile.amd64-build scripts/
+        cp scripts/docker-build-apt-get.sh scripts/
 
-    - name: Check build status
-      if: always()
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      timeout-minutes: 30
+      with:
+        context: tailscale-android
+        file: tailscale-android/docker/DockerFile.amd64-build
+        tags: tailscale-android-build:latest
+        push: false
+        load: true
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+          DOCKER_BUILDKIT=1
+          ANDROID_SDK_VERSION=34
+          ANDROID_BUILD_TOOLS_VERSION=34.0.0
+          ANDROID_NDK_VERSION=23.1.7779620
+
+    - name: Move cache
+      # Temp fix
+      # https://github.com/docker/build-push-action/issues/252
+      # https://github.com/moby/buildkit/issues/1896
       run: |
-        if [ -f "tailscale-android/tailscale-debug.apk" ]; then
-          echo "APK build successful"
-          ls -lh tailscale-android/tailscale-debug.apk
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+    - name: Build APK
+      timeout-minutes: 45
+      run: |
+        cd tailscale-android
+        echo "Building APK using Docker..."
+        # Create gradle cache directory with correct permissions
+        mkdir -p $HOME/.gradle
+        docker run --rm \
+          -v $PWD:/build/tailscale-android \
+          -v $HOME/.gradle:/root/.gradle \
+          -v /tmp/android-cache:/root/.android \
+          -e BUILD_NUMBER=${{ github.run_number }} \
+          -e GIT_COMMIT=${{ github.sha }} \
+          -e CI=true \
+          -e GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true" \
+          --user $(id -u):$(id -g) \
+          --memory=7g \
+          --cpus=2 \
+          tailscale-android-build \
+          bash -c "make clean && make androidsdk && TERM=dumb make apk"
+
+    - name: Verify build artifacts
+      run: |
+        cd tailscale-android
+        if [ -f "tailscale-debug.apk" ]; then
+          echo "Build successful"
+          echo "APK info:"
+          ls -lh tailscale-debug.apk
         else
-          echo "APK build failed - file not found"
+          echo "Build failed - APK not found"
           exit 1
         fi
 
@@ -147,7 +113,7 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug-api${{ matrix.android-api-level }}
+        name: tailscale-debug
         path: tailscale-android/tailscale-debug.apk
         if-no-files-found: error
         
@@ -158,18 +124,22 @@ jobs:
           echo "## Build Results :package:"
           echo ""
           echo "### Build Info"
-          echo "- Start Time: $(date -d @${{ env.GITHUB_RUN_STARTED_AT }} '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "- Start Time: ${{ github.event.repository.pushed_at }}"
           echo "- End Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
           echo "- Runner: \`${{ runner.os }}\`"
+          echo "- Docker Image: tailscale-android-build"
+          echo "- Commit: \`${{ github.sha }}\`"
+          echo "- Build Number: \`${{ github.run_number }}\`"
+          echo "- Go Version: \`$(docker run --rm tailscale-android-build go version)\`"
           echo ""
-          echo "### Build Status"
           if [ -f "tailscale-android/tailscale-debug.apk" ]; then
             SIZE=$(ls -lh tailscale-android/tailscale-debug.apk | awk '{print $5}')
             echo "✅ Build completed successfully"
             echo "- APK Size: $SIZE"
-            echo "- Artifact Name: app-debug-api${{ matrix.android-api-level }}"
-            echo "- Android API Level: ${{ matrix.android-api-level }}"
             echo "- SHA256: \`$(sha256sum tailscale-android/tailscale-debug.apk | cut -d' ' -f1)\`"
+            echo "- Output Path: \`tailscale-android/tailscale-debug.apk\`"
+            echo "- MD5: \`$(md5sum tailscale-android/tailscale-debug.apk | cut -d' ' -f1)\`"
+            echo "- File Type: \`$(file tailscale-android/tailscale-debug.apk)\`"
           else
             echo "❌ Build failed"
             echo "- APK not found"
