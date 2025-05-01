@@ -51,24 +51,124 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    - name: Set up tool directory
+    - name: Debug Environment
       run: |
+        echo "Current directory: $PWD"
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        echo "Files in current directory:"
+        ls -la
+        echo "Android SDK tools:"
+        ls -la $ANDROID_HOME/cmdline-tools/latest/bin || echo "cmdline-tools not found"
+        ls -la $ANDROID_HOME/platform-tools || echo "platform-tools not found"
+
+    - name: Set up Go tools
+      run: |
+        echo "Setting up Go tools..."
         mkdir -p tool
         echo '#!/bin/bash' > tool/go
-        echo 'exec go "$@"' >> tool/go
+        {
+          echo 'set -e'
+          echo 'timestamp() { date "+%Y-%m-%d %H:%M:%S"; }'
+          echo 'log() { echo "[$({ timestamp; } 2>/dev/null)] $*"; }'
+          echo 'log "Starting go wrapper"'
+          echo 'log "Arguments: $*"'
+          echo 'log "Working directory: $PWD"'
+          echo 'log "PATH: $PATH"'
+          echo 'log "GOROOT: $GOROOT"'
+          echo 'log "GOPATH: $GOPATH"'
+          echo 'log "Locating go executable..."'
+          echo 'GO_BIN=$(which go || true)'
+          echo 'if [ -z "$GO_BIN" ]; then'
+          echo '  log "ERROR: go binary not found in PATH"'
+          echo '  exit 1'
+          echo 'fi'
+          echo 'log "Using go from: $GO_BIN"'
+          echo 'log "Go version: $($GO_BIN version)"'
+          echo 'log "Executing: $GO_BIN $*"'
+          echo '$GO_BIN "$@"'
+          echo 'status=$?'
+          echo 'log "Command completed with status: $status"'
+          echo 'exit $status'
+        } >> tool/go
         chmod +x tool/go
+        echo "Go tools directory:"
+        ls -la tool
+        echo "Go wrapper contents:"
+        cat tool/go
+        echo "Testing go wrapper..."
+        ./tool/go version
 
-    - name: Build AAR Library
-      env:
-        TS_USE_TOOLCHAIN: "1"
-        GOBIN: ${{ github.workspace }}/tailscale-android/android/build/go/bin
+    - name: Install Go mobile tools
       run: |
-        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PWD/tool:$PATH
+        export GOPATH=${{ github.workspace }}/go
+        export GOBIN=${{ github.workspace }}/tailscale-android/android/build/go/bin
+        echo "GOPATH=$GOPATH"
+        echo "GOBIN=$GOBIN"
+        echo "Installing Go mobile tools..."
         mkdir -p android/build/go/bin
         go install golang.org/x/mobile/cmd/gobind@latest
         go install golang.org/x/mobile/cmd/gomobile@latest
-        $GOBIN/gomobile init
-        make libtailscale version
+        echo "Installed tools:"
+        ls -la $GOBIN
+
+    - name: Debug build environment
+      run: |
+        echo "Full directory tree:"
+        find ${{ github.workspace }} -maxdepth 3 -type d
+        echo "Full environment:"
+        env | sort
+        
+    - name: Initialize Go mobile
+      run: |
+        export GOPATH=${{ github.workspace }}/go
+        export GOBIN=${{ github.workspace }}/tailscale-android/android/build/go/bin
+        export ANDROID_NDK_HOME=${{ github.workspace }}/android-sdk/ndk/23.1.7779620
+        echo "[$(date)] === Initializing Go mobile ==="
+        # First verify go is working
+        echo "[$(date)] Go version:"
+        go version
+        
+        # Check NDK installation
+        echo "[$(date)] Checking NDK directories:"
+        for d in "$ANDROID_NDK" "$ANDROID_NDK_HOME" "$NDK" "$NDK_ROOT"; do
+          echo "Looking in $d:"
+          ls -la "$d" || echo "Not found"
+        done
+        
+        # Check gomobile exists
+        echo "[$(date)] Checking gomobile binary:"
+        ls -la "$GOBIN/gomobile"
+        
+        # Double check gomobile installation
+        echo "[$(date)] Installing latest gomobile..."
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        
+        echo "[$(date)] Initializing gomobile with explicit paths..."
+        "$GOBIN/gomobile" init -ndk="$NDK_ROOT" -v
+
+    - name: Build AAR Library
+      run: |
+        export GOPATH=${{ github.workspace }}/go
+        export GOBIN=${{ github.workspace }}/tailscale-android/android/build/go/bin
+        export ANDROID_NDK_HOME=${{ github.workspace }}/android-sdk/ndk/23.1.7779620
+        export TS_USE_TOOLCHAIN=1
+        export PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PWD}/tool:${PATH}"
+        echo "[$(date)] Starting AAR build..."
+        echo "Current environment:"
+        env | sort
+        make libtailscale version || {
+            echo "[$(date)] Build failed. Debug info:"
+            echo "Current directory contents:"
+            ls -la
+            echo "Android SDK contents:"
+            ls -la $ANDROID_HOME
+            echo "Tool wrapper log:"
+            cat tool/go
+            echo "Makefile contents:"
+            cat Makefile
+            exit 1
+        }
+        echo "[$(date)] AAR build completed"
         
     - name: Build APK
       run: |
