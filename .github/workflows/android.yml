@@ -17,16 +17,32 @@ jobs:
       TS_USE_TOOLCHAIN: "1"
 
     steps:
-    - name: Define error handler
+    - name: Create build utilities
       run: |
+        mkdir -p $HOME/buildutils
+        cat > $HOME/buildutils/functions.sh << 'EOF'
         error_handler() {
           echo "Error occurred in ${1:-unknown step}"
+          echo "Working directory: $PWD"
           echo "Directory structure:"
-          ls -R ./tailscale-android
-          echo "Environment:"
+          ls -R ./
+          echo "Environment variables:"
           env | sort
           return 1
         }
+
+        debug_info() {
+          echo "Debug info for: $1"
+          echo "Current directory: $PWD"
+          echo "Files:"
+          ls -la
+          if [ -f "Makefile" ]; then
+            echo "Makefile contents:"
+            cat Makefile
+          fi
+        }
+        EOF
+        chmod +x $HOME/buildutils/functions.sh
     - uses: actions/checkout@v4
     
     - name: Set up Go
@@ -42,7 +58,9 @@ jobs:
 
     - name: Set up Android SDK
       run: |
+        source $HOME/buildutils/functions.sh
         cd tailscale-android || error_handler "cd to tailscale-android"
+        debug_info "Android SDK setup"
         mkdir -p android-sdk/cmdline-tools
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip || error_handler "download SDK tools"
         unzip -q commandlinetools-linux-9477386_latest.zip || error_handler "unzip SDK tools"
@@ -63,7 +81,9 @@ jobs:
 
     - name: Run make androidsdk
       run: |
+        source $HOME/buildutils/functions.sh
         cd tailscale-android || error_handler "cd to tailscale-android"
+        debug_info "Before androidsdk"
         echo "Makefile contents:"
         cat Makefile
         echo "Directory structure:"
@@ -73,7 +93,9 @@ jobs:
 
     - name: Build Debug APK
       run: |
+        source $HOME/buildutils/functions.sh
         cd tailscale-android || error_handler "cd to tailscale-android"
+        debug_info "Before APK build"
         export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
         go version || error_handler "check go"
         echo "Current environment:"
