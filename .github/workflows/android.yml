@@ -12,6 +12,9 @@ jobs:
     defaults:
       run:
         working-directory: ./tailscale-android
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
 
     steps:
     - uses: actions/checkout@v4
@@ -27,8 +30,16 @@ jobs:
       with:
         go-version: '1.21'
         
-    - name: Install Android SDK components
-      run: make androidsdk
+    - name: Set up Android SDK
+      run: |
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip
+        mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        rm commandlinetools-linux-9477386_latest.zip
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-34' 'extras;android;m2repository' 'ndk;23.1.7779620' 'platform-tools' 'build-tools;34.0.0'
       
     - name: Cache Gradle packages
       uses: actions/cache@v4
@@ -47,4 +58,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: app-release
-        path: tailscale-android/android/build/outputs/apk/release/android-release-unsigned.apk
+        path: tailscale-android/android/build/outputs/apk/release/**/*.apk
