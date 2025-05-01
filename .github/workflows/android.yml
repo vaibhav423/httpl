@@ -3,12 +3,25 @@ name: Android CI
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'tailscale-android/**'
+      - '.github/workflows/android.yml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'tailscale-android/**'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
+  checks: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        android-api-level: ['34', '33', '32']  # Test on latest 3 API levels
     env:
       ANDROID_HOME: ${{ github.workspace }}/tailscale-android/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/tailscale-android/android-sdk
@@ -67,7 +80,7 @@ jobs:
         mv cmdline-tools android-sdk/cmdline-tools/latest || error_handler "move cmdline-tools"
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --update
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" "ndk;23.1.7779620"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-${{ matrix.android-api-level }}" "build-tools;${{ matrix.android-api-level }}.0.0" "platform-tools" "ndk;23.1.7779620"
 
     - name: Cache Gradle packages
       uses: actions/cache@v4
@@ -92,30 +105,74 @@ jobs:
         make androidsdk || { echo "make androidsdk failed. Running with verbose output..."; make -d androidsdk; exit 1; }
 
     - name: Build Debug APK
+      id: build
       run: |
         source $HOME/buildutils/functions.sh
         cd tailscale-android || error_handler "cd to tailscale-android"
-        debug_info "Before APK build"
-        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-        go version || error_handler "check go"
+        debug_info "APK build"
         echo "Current environment:"
         env | sort
+        
+        echo "Verifying build prerequisites..."
+        go version || error_handler "check go version"
+        java -version || error_handler "check java version"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --version || error_handler "check sdkmanager"
+        
         echo "Building APK..."
         ls -la android/
         echo "Running make apk with debug output..."
         make -d apk || {
             echo "APK build failed. Debug info:"
-            echo "android/ directory contents:"
-            ls -la android/
-            echo "android/build/ contents (if exists):"
-            ls -la android/build/ || true
-            echo "Last 100 lines of Android Studio's idea.log (if exists):"
-            tail -n 100 ~/.AndroidStudio*/system/log/idea.log 2>/dev/null || true
-            exit 1
+            echo "Build environment:"
+            debug_info "Build failure state"
+            echo "Android SDK contents:"
+            ls -la $ANDROID_HOME || true
+            echo "Last build logs:"
+            find . -name "*.log" -type f -exec tail -n 50 {} \;
+            error_handler "APK build failed"
         }
 
+    - name: Check build status
+      if: always()
+      run: |
+        if [ -f "tailscale-android/tailscale-debug.apk" ]; then
+          echo "APK build successful"
+          ls -lh tailscale-android/tailscale-debug.apk
+        else
+          echo "APK build failed - file not found"
+          exit 1
+        fi
+
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
+        name: app-debug-api${{ matrix.android-api-level }}
         path: tailscale-android/tailscale-debug.apk
+        if-no-files-found: error
+        
+    - name: Build Summary
+      if: always()
+      run: |
+        {
+          echo "## Build Results :package:"
+          echo ""
+          echo "### Build Info"
+          echo "- Start Time: $(date -d @${{ env.GITHUB_RUN_STARTED_AT }} '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "- End Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "- Runner: \`${{ runner.os }}\`"
+          echo ""
+          echo "### Build Status"
+          if [ -f "tailscale-android/tailscale-debug.apk" ]; then
+            SIZE=$(ls -lh tailscale-android/tailscale-debug.apk | awk '{print $5}')
+            echo "✅ Build completed successfully"
+            echo "- APK Size: $SIZE"
+            echo "- Artifact Name: app-debug-api${{ matrix.android-api-level }}"
+            echo "- Android API Level: ${{ matrix.android-api-level }}"
+            echo "- SHA256: \`$(sha256sum tailscale-android/tailscale-debug.apk | cut -d' ' -f1)\`"
+          else
+            echo "❌ Build failed"
+            echo "- APK not found"
+            echo "- Check the build logs for more details"
+          fi
+        } >> $GITHUB_STEP_SUMMARY
