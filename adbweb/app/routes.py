@@ -172,7 +172,19 @@ def lookup_mac():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Error looking up MAC address: {str(e)}'})
 
-@app.route('/foreground-app')
+def shutdown_server():
+    from flask import request
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        return jsonify({'status': 'error', 'message': 'Not running with Werkzeug server'})
+    func()
+    return jsonify({'status': 'success', 'message': 'Server shutting down...'})
+
+@app.route('/stop', methods=['POST'])
+def stop_server():
+    return shutdown_server()
+
+@app.route('/foreground-app', methods=['GET'])
 def get_foreground_app():
     # Try to get the current foreground activity
     result = run_adb_command(['shell', 'dumpsys activity activities'])
