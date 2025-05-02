@@ -174,11 +174,13 @@ def lookup_mac():
 
 def shutdown_server():
     from flask import request
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        return jsonify({'status': 'error', 'message': 'Not running with Werkzeug server'})
-    func()
-    return jsonify({'status': 'success', 'message': 'Server shutting down...'})
+    import os
+    import signal
+    try:
+        os.kill(os.getpid(), signal.SIGTERM)
+        return jsonify({'status': 'success', 'message': 'Server shutting down...'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to shutdown server: {str(e)}'})
 
 @app.route('/stop', methods=['POST'])
 def stop_server():
