@@ -153,6 +153,25 @@ def launch_app():
     else:
         return jsonify({'status': 'error', 'message': f'Failed to launch {package_name}'})
 
+@app.route('/lookup-mac', methods=['POST'])
+def lookup_mac():
+    mac = request.form.get('mac')
+    if not mac:
+        return jsonify({'status': 'error', 'message': 'MAC address is required'})
+    
+    try:
+        # Run the arp lookup command
+        command = f"sudo awk -v mac=\"{mac}\" 'tolower($4)==tolower(mac) {{print $1}}' /proc/net/arp"
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        
+        ip = result.stdout.strip()
+        if ip:
+            return jsonify({'status': 'success', 'ip': ip})
+        else:
+            return jsonify({'status': 'error', 'message': 'No IP found for this MAC address'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Error looking up MAC address: {str(e)}'})
+
 @app.route('/foreground-app')
 def get_foreground_app():
     # Try to get the current foreground activity

@@ -121,6 +121,22 @@
             background-color: #27ae60;
         }
 
+        .mac-lookup {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        .mac-lookup input {
+            flex: 1;
+        }
+
+        .mac-lookup button {
+            white-space: nowrap;
+        }
+
         .status {
             margin: 1rem 0;
             padding: 1rem;
@@ -330,6 +346,13 @@
         </div>
         
         <div class="input-group">
+            <div class="mac-lookup">
+                <input type="text" id="macAddress" value="02:DB:E6:EF:2A:AB" placeholder="Enter MAC address">
+                <button onclick="lookupMac()" class="secondary">
+                    <i class="fas fa-search"></i>
+                    Lookup IP
+                </button>
+            </div>
             <input type="text" id="ipAddress" placeholder="Enter device IP address (e.g., 192.168.1.100:5555)">
             <button onclick="connectDevice()">
                 <i class="fas fa-plug"></i>
@@ -651,10 +674,16 @@
             });
         }
 
-        // Add Enter key support for the IP address input
+        // Add Enter key support for inputs
         document.getElementById('ipAddress').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 connectDevice();
+            }
+        });
+
+        document.getElementById('macAddress').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                lookupMac();
             }
         });
 
@@ -784,6 +813,37 @@
         }
 
         // Start polling when device connects
+        function lookupMac() {
+            const macAddress = document.getElementById('macAddress').value.trim();
+            if (!macAddress) {
+                showStatus('Please enter a MAC address', true);
+                return;
+            }
+
+            showLoading(true);
+            fetch('/lookup-mac', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `mac=${encodeURIComponent(macAddress)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                if (data.status === 'success') {
+                    document.getElementById('ipAddress').value = data.ip + ':5555';
+                    showStatus('IP address found and copied to input');
+                } else {
+                    showStatus(data.message, true);
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                showStatus('Failed to lookup MAC address: ' + error, true);
+            });
+        }
+
         function connectDevice() {
             const ipAddress = document.getElementById('ipAddress').value;
             if (!ipAddress) {
