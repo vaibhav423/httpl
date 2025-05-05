@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>Hotspot Users</h2>
+    </div>
+</div>
+
+<div class="row">
+    {% for user in users %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card user-card">
+            <div class="card-header">
+                <h5 class="mb-0">User Details</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>MAC Address:</strong>
+                    <span class="text-monospace">{{ user.mac_address }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Hostname:</strong>
+                    <span>{{ user.hostname or 'Unknown' }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>IP Address:</strong>
+                    <span class="text-monospace">{{ user.ip_address or 'Unknown' }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Status:</strong>
+                    <span class="badge {% if user.is_active %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ 'Active' if user.is_active else 'Inactive' }}
+                    </span>
+                </div>
+                <hr>
+                <h6>Block Site</h6>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="domain-input-{{ user.id }}" 
+                           placeholder="Enter domain (e.g., facebook.com)">
+                    <button class="btn btn-primary" onclick="blockSite({{ user.id }})">Block</button>
+                </div>
+                <h6>Blocked Sites</h6>
+                <div class="blocked-sites-list">
+                    <ul class="list-group">
+                        {% for site in user.blocked_sites %}
+                        {% if site.is_active %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ site.domain }}
+                            <button class="btn btn-sm btn-danger" 
+                                    onclick="unblockSite({{ user.id }}, {{ site.id }})">
+                                Unblock
+                            </button>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                Connected since: {{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col">
+        <div class="alert alert-info">
+            No users connected to the hotspot yet.
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

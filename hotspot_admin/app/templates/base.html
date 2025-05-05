@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hotspot Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .navbar {
+            margin-bottom: 20px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+        .user-card {
+            transition: all 0.3s ease;
+        }
+        .user-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .blocked-sites-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">Hotspot Admin</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.users') }}">Users</a>
+                    </li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function blockSite(userId) {
+            const domain = document.getElementById(`domain-input-${userId}`).value;
+            if (!domain) {
+                alert('Please enter a domain to block');
+                return;
+            }
+
+            fetch(`/api/users/${userId}/block-site`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ domain: domain })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while blocking the site');
+            });
+        }
+
+        function unblockSite(userId, siteId) {
+            fetch(`/api/users/${userId}/unblock-site/${siteId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while unblocking the site');
+            });
+        }
+    </script>
+</body>
+</html>
