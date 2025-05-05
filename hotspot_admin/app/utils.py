@@ -1,7 +1,6 @@
 import os
 import subprocess
 from flask import current_app
-import iptc
 
 class DNSManager:
     @staticmethod
@@ -23,9 +22,10 @@ class DNSManager:
     @staticmethod
     def start_dnsmasq():
         cmd = [
-            "dnsmasq",
-            f"--conf-file={current_app.config['DNSMASQ_CONF_PATH']}",
-            f"--pid-file={current_app.config['DNSMASQ_PID_PATH']}",
+            "su",
+            "-c",
+            f"dnsmasq --conf-file={current_app.config['DNSMASQ_CONF_PATH']} " +
+            f"--pid-file={current_app.config['DNSMASQ_PID_PATH']} " +
             "--no-daemon"
         ]
         return subprocess.Popen(cmd)
@@ -35,7 +35,7 @@ class DNSManager:
         try:
             with open(current_app.config['DNSMASQ_PID_PATH'], 'r') as f:
                 pid = int(f.read().strip())
-                os.kill(pid, 15)  # SIGTERM
+                subprocess.run(['su', '-c', f'kill -15 {pid}'])
             os.remove(current_app.config['DNSMASQ_PID_PATH'])
             return True
         except (FileNotFoundError, ProcessLookupError):
@@ -43,34 +43,22 @@ class DNSManager:
 
 class IPTablesManager:
     @staticmethod
+    def execute_iptables_command(command):
+        full_command = f"iptables {command}"
+        subprocess.run(['su', '-c', full_command], check=True)
+
+    @staticmethod
     def add_dns_redirect_rules():
         iface = current_app.config['HOTSPOT_INTERFACE']
         dns_port = current_app.config['DNS_PORT']
         
-        # UDP DNS redirect
-        rule_udp = {
-            'protocol': 'udp',
-            'dst': '53',
-            'to-port': str(dns_port),
-            'target': 'REDIRECT'
-        }
+        commands = [
+            f"-t nat -I PREROUTING -i {iface} -p udp --dport 53 -j REDIRECT --to-port {dns_port}",
+            f"-t nat -I PREROUTING -i {iface} -p tcp --dport 53 -j REDIRECT --to-port {dns_port}"
+        ]
         
-        # TCP DNS redirect
-        rule_tcp = {
-            'protocol': 'tcp',
-            'dst': '53',
-            'to-port': str(dns_port),
-            'target': 'REDIRECT'
-        }
-        
-        chain = iptc.Chain(iptc.Table(iptc.Table.NAT), "PREROUTING")
-        
-        for rule in [rule_udp, rule_tcp]:
-            rule['in-interface'] = iface
-            iptc_rule = iptc.Rule()
-            for key, value in rule.items():
-                setattr(iptc_rule, key.replace('-', '_'), value)
-            chain.insert_rule(iptc_rule)
+        for cmd in commands:
+            IPTablesManager.execute_iptables_command(cmd)
 
     @staticmethod
     def add_http_redirect_rules():
@@ -78,34 +66,14 @@ class IPTablesManager:
         http_port = current_app.config['HTTP_PORT']
         https_port = current_app.config['HTTPS_PORT']
         
-        rules = [
-            # HTTP redirect
-            {
-                'protocol': 'tcp',
-                'dst': '80',
-                'to-port': str(http_port),
-                'target': 'REDIRECT'
-            },
-            # HTTPS redirect
-            {
-                'protocol': 'tcp',
-                'dst': '443',
-                'to-port': str(https_port),
-                'target': 'REDIRECT'
-            }
+        commands = [
+            f"-t nat -I PREROUTING -i {iface} -p tcp --dport 80 -j REDIRECT --to-port {http_port}",
+            f"-t nat -I PREROUTING -i {iface} -p tcp --dport 443 -j REDIRECT --to-port {https_port}"
         ]
         
-        chain = iptc.Chain(iptc.Table(iptc.Table.NAT), "PREROUTING")
-        
-        for rule in rules:
-            rule['in-interface'] = iface
-            iptc_rule = iptc.Rule()
-            for key, value in rule.items():
-                setattr(iptc_rule, key.replace('-', '_'), value)
-            chain.insert_rule(iptc_rule)
+        for cmd in commands:
+            IPTablesManager.execute_iptables_command(cmd)
 
     @staticmethod
     def clear_rules():
-        table = iptc.Table(iptc.Table.NAT)
-        chain = iptc.Chain(table, "PREROUTING")
-        chain.flush()
+        subprocess.run(['su', '-c', 'iptables -t nat -F PREROUTING'], check=True)
