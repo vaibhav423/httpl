@@ -1,10 +1,9 @@
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import UserMixin
 from datetime import datetime
 
 db = SQLAlchemy()
 
-class User(UserMixin, db.Model):
+class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     mac_address = db.Column(db.String(17), unique=True, nullable=False)
     hostname = db.Column(db.String(64))
@@ -25,13 +24,3 @@ class BlockedSite(db.Model):
 
     def __repr__(self):
         return f'<BlockedSite {self.domain} for user {self.user_id}>'
-
-class AdminUser(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def __repr__(self):
-        return f'<AdminUser {self.username}>'

@@ -1,13 +1,8 @@
 from app import create_app
-from flask_login import current_user
 from app.models import User
 import os
 
 app = create_app()
-
-@app.context_processor
-def utility_processor():
-    return dict(current_user=current_user)
 
 if __name__ == '__main__':
     # Ensure the application instance path exists

@@ -2,7 +2,7 @@ import os
 
 class Config:
     # Flask configuration
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-please-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key'
     
     # Database configuration
     SQLALCHEMY_DATABASE_URI = 'sqlite:///hotspot.db'
