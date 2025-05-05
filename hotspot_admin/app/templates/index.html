@@ -3,7 +3,7 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col">
-        <h2>Hotspot Users</h2>
+        <h2>Connected Devices</h2>
     </div>
 </div>
 
@@ -11,8 +11,11 @@
     {% for user in users %}
     <div class="col-md-6 col-lg-4">
         <div class="card user-card">
-            <div class="card-header">
-                <h5 class="mb-0">User Details</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Device Details</h5>
+                <span class="badge {% if user.connection_status == 'Connected' %}bg-success{% elif user.connection_status == 'Inactive' %}bg-warning{% else %}bg-danger{% endif %}">
+                    {{ user.connection_status }}
+                </span>
             </div>
             <div class="card-body">
                 <div class="mb-3">
@@ -28,18 +31,18 @@
                     <span class="text-monospace">{{ user.ip_address or 'Unknown' }}</span>
                 </div>
                 <div class="mb-3">
-                    <strong>Status:</strong>
-                    <span class="badge {% if user.is_active %}bg-success{% else %}bg-danger{% endif %}">
-                        {{ 'Active' if user.is_active else 'Inactive' }}
-                    </span>
+                    <strong>Last Seen:</strong>
+                    <span>{{ user.last_seen.strftime('%Y-%m-%d %H:%M:%S') }}</span>
                 </div>
                 <hr>
+                {% if user.is_active %}
                 <h6>Block Site</h6>
                 <div class="input-group mb-3">
                     <input type="text" class="form-control" id="domain-input-{{ user.id }}" 
                            placeholder="Enter domain (e.g., facebook.com)">
                     <button class="btn btn-primary" onclick="blockSite({{ user.id }})">Block</button>
                 </div>
+                {% endif %}
                 <h6>Blocked Sites</h6>
                 <div class="blocked-sites-list">
                     <ul class="list-group">
@@ -47,10 +50,12 @@
                         {% if site.is_active %}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             {{ site.domain }}
+                            {% if user.is_active %}
                             <button class="btn btn-sm btn-danger" 
                                     onclick="unblockSite({{ user.id }}, {{ site.id }})">
                                 Unblock
                             </button>
+                            {% endif %}
                         </li>
                         {% endif %}
                         {% endfor %}
@@ -58,16 +63,23 @@
                 </div>
             </div>
             <div class="card-footer text-muted">
-                Connected since: {{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                First seen: {{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
             </div>
         </div>
     </div>
     {% else %}
     <div class="col">
         <div class="alert alert-info">
-            No users connected to the hotspot yet.
+            No devices currently connected to the hotspot. Make sure the hotspot is enabled and devices are connected.
         </div>
     </div>
     {% endfor %}
 </div>
+
+<script>
+    // Auto-refresh the page every 30 seconds
+    setTimeout(function() {
+        location.reload();
+    }, 30000);
+</script>
 {% endblock %}

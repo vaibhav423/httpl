@@ -1,15 +1,104 @@
 import os
 import subprocess
+import re
+from datetime import datetime
 from flask import current_app
+from .models import User, db
+
+class NetworkManager:
+    @staticmethod
+    def init_network():
+        """Initialize network configuration"""
+        # Execute initialization commands
+        for cmd in current_app.config['INIT_COMMANDS']:
+            subprocess.run(['su', '-c', cmd], check=True)
+
+    @staticmethod
+    def get_connected_devices():
+        """Get list of connected devices using ARP table"""
+        devices = []
+        try:
+            arp_output = subprocess.check_output(
+                ['su', '-c', f'ip neigh show dev {current_app.config["HOTSPOT_INTERFACE"]}']
+            ).decode()
+            
+            for line in arp_output.splitlines():
+                # Parse IP and MAC from ARP table
+                match = re.match(r'([\d.]+) .* ([0-9a-fA-F:]{17})', line.upper())
+                if match:
+                    ip, mac = match.groups()
+                    if ip.startswith(current_app.config['HOTSPOT_SUBNET'].split('/')[0].rsplit('.', 1)[0]):
+                        devices.append({
+                            'ip_address': ip,
+                            'mac_address': mac,
+                            'hostname': NetworkManager.get_hostname(ip)
+                        })
+        except Exception as e:
+            print(f"Error getting connected devices: {e}")
+        return devices
+
+    @staticmethod
+    def get_hostname(ip):
+        """Try to get hostname for an IP address"""
+        try:
+            output = subprocess.check_output(
+                ['su', '-c', f'getprop net.{current_app.config["HOTSPOT_INTERFACE"]}.hostname'],
+                timeout=1
+            ).decode().strip()
+            return output if output else 'Unknown'
+        except:
+            return 'Unknown'
+
+    @staticmethod
+    def sync_connected_devices():
+        """Sync connected devices with database"""
+        connected_devices = NetworkManager.get_connected_devices()
+        
+        # Update database with connected devices
+        for device in connected_devices:
+            user = User.query.filter_by(mac_address=device['mac_address']).first()
+            if not user:
+                user = User(
+                    mac_address=device['mac_address'],
+                    hostname=device['hostname'],
+                    ip_address=device['ip_address']
+                )
+                db.session.add(user)
+            else:
+                user.ip_address = device['ip_address']
+                user.hostname = device['hostname']
+                user.is_active = True
+                user.last_seen = datetime.utcnow()
+        
+        # Mark disconnected devices as inactive
+        connected_macs = [d['mac_address'] for d in connected_devices]
+        User.query.filter(~User.mac_address.in_(connected_macs)).update(
+            {'is_active': False}, synchronize_session=False
+        )
+        
+        db.session.commit()
 
 class DNSManager:
     @staticmethod
     def create_dnsmasq_config(blocked_domains, redirect_ip='127.0.0.1'):
         config_content = [
             f"port={current_app.config['DNS_PORT']}",
-            "no-resolv"
+            "no-resolv",
+            "no-poll",
+            "no-hosts",
+            f"interface={current_app.config['HOTSPOT_INTERFACE']}",
+            f"listen-address={current_app.config['HOTSPOT_IP']}",
+            # DHCP configuration
+            f"dhcp-range={current_app.config['DHCP_RANGE_START']},{current_app.config['DHCP_RANGE_END']},12h",
+            f"dhcp-option=option:router,{current_app.config['HOTSPOT_IP']}",
+            f"dhcp-leasefile=/data/local/tmp/dnsmasq.leases"
         ]
         
+        # Add upstream DNS servers
+        for dns in current_app.config['UPSTREAM_DNS']:
+            config_content.append(f"server={dns}")
+        
+        # Add blocked domains
         for domain in blocked_domains:
             config_content.append(f"address=/{domain}/{redirect_ip}")
         
@@ -21,6 +110,11 @@ class DNSManager:
 
     @staticmethod
     def start_dnsmasq():
+        try:
+            DNSManager.stop_dnsmasq()
+        except:
+            pass
+
         cmd = [
             "su",
             "-c",
@@ -35,7 +129,7 @@ class DNSManager:
         try:
             with open(current_app.config['DNSMASQ_PID_PATH'], 'r') as f:
                 pid = int(f.read().strip())
-                subprocess.run(['su', '-c', f'kill -15 {pid}'])
+                subprocess.run(['su', '-c', f'kill -15 {pid}'], check=True)
             os.remove(current_app.config['DNSMASQ_PID_PATH'])
             return True
         except (FileNotFoundError, ProcessLookupError):
@@ -46,6 +140,14 @@ class IPTablesManager:
     def execute_iptables_command(command):
         full_command = f"iptables {command}"
         subprocess.run(['su', '-c', full_command], check=True)
+
+    @staticmethod
+    def init_rules():
+        """Initialize base iptables rules"""
+        IPTablesManager.clear_rules()
+        NetworkManager.init_network()
+        IPTablesManager.add_dns_redirect_rules()
+        IPTablesManager.add_http_redirect_rules()
 
     @staticmethod
     def add_dns_redirect_rules():
