@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DNS Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        button, .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .button-red {
+            background-color: #f44336;
+        }
+        .button-blue {
+            background-color: #2196F3;
+        }
+        input[type=text], select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+        }
+        .checkbox-container input {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DNS Controller</h1>
+        
+        <!-- Global Settings -->
+        <div class="card">
+            <h2>Global DNS Settings</h2>
+            <form action="/global-settings" method="post">
+                <div class="form-group">
+                    <label for="default_dns">Default DNS Server:</label>
+                    <input type="text" id="default_dns" name="default_dns" value="{{ global_settings.default_dns }}">
+                    <small>Used when no override is active (e.g., 1.1.1.1, 8.8.8.8)</small>
+                </div>
+                
+                <div class="form-group checkbox-container">
+                    <input type="checkbox" id="global_override_enabled" name="global_override_enabled" {% if global_settings.global_override_enabled %}checked{% endif %}>
+                    <label for="global_override_enabled">Enable Global DNS Override</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="global_override_ip">Global Override IP:</label>
+                    <input type="text" id="global_override_ip" name="global_override_ip" value="{{ global_settings.global_override_ip }}">
+                    <small>All domains will resolve to this IP if global override is enabled</small>
+                </div>
+                
+                <button type="submit">Save Global Settings</button>
+            </form>
+        </div>
+        
+        <!-- Network Scanner -->
+        <div class="card">
+            <h2>Network Scanner</h2>
+            <div class="form-group">
+                <label for="interface">Select Network Interface:</label>
+                <select id="interface">
+                    {% for interface in interfaces %}
+                    <option value="{{ interface }}">{{ interface }}</option>
+                    {% endfor %}
+                </select>
+                <button onclick="scanNetwork()">Scan Network</button>
+            </div>
+            
+            <div id="scan-results">
+                <table id="devices-table" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>MAC Address</th>
+                            <th>Hostname</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-list">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Active DNS Configurations -->
+        <div class="card">
+            <h2>Active DNS Configurations</h2>
+            {% if users %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>IP Address</th>
+                        <th>Override</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.ip }}</td>
+                        <td>
+                            {% if user.settings.override_enabled %}
+                            Custom: {{ user.settings.override_ip }}
+                            {% else %}
+                            Using global settings
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/user/{{ user.id }}" class="button button-blue">Edit</a>
+                            <form action="/delete-dns/{{ user.id }}" method="post" style="display: inline;">
+                                <button type="submit" class="button button-red">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No active DNS configurations.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        function scanNetwork() {
+            const interface = document.getElementById('interface').value;
+            const devicesTable = document.getElementById('devices-table');
+            const devicesList = document.getElementById('devices-list');
+            
+            // Show loading
+            devicesList.innerHTML = '<tr><td colspan="4">Scanning network...</td></tr>';
+            devicesTable.style.display = 'table';
+            
+            // Fetch devices
+            fetch(`/scan/${interface}`)
+                .then(response => response.json())
+                .then(devices => {
+                    devicesList.innerHTML = '';
+                    
+                    if (devices.length === 0) {
+                        devicesList.innerHTML = '<tr><td colspan="4">No devices found</td></tr>';
+                        return;
+                    }
+                    
+                    devices.forEach(device => {
+                        const row = document.createElement('tr');
+                        
+                        // IP Address
+                        const ipCell = document.createElement('td');
+                        ipCell.textContent = device.ip;
+                        row.appendChild(ipCell);
+                        
+                        // MAC Address
+                        const macCell = document.createElement('td');
+                        macCell.textContent = device.mac;
+                        row.appendChild(macCell);
+                        
+                        // Hostname
+                        const hostnameCell = document.createElement('td');
+                        hostnameCell.textContent = device.hostname;
+                        row.appendChild(hostnameCell);
+                        
+                        // Actions
+                        const actionsCell = document.createElement('td');
+                        if (device.has_dns) {
+                            actionsCell.textContent = 'DNS Already Configured';
+                        } else {
+                            const form = document.createElement('form');
+                            form.action = '/create-dns';
+                            form.method = 'post';
+                            
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = 'ip';
+                            input.value = device.ip;
+                            
+                            const button = document.createElement('button');
+                            button.type = 'submit';
+                            button.className = 'button';
+                            button.textContent = 'Create DNS';
+                            
+                            form.appendChild(input);
+                            form.appendChild(button);
+                            actionsCell.appendChild(form);
+                        }
+                        row.appendChild(actionsCell);
+                        
+                        devicesList.appendChild(row);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    devicesList.innerHTML = '<tr><td colspan="4">Error scanning network</td></tr>';
+                });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,247 @@
+import os
+import subprocess
+import glob
+import json
+import shutil
+
+def get_global_settings():
+    """Get global DNS settings"""
+    settings_file = '/workspaces/httpl/sdcard/blserver/conf/global_dns.json'
+    if os.path.exists(settings_file):
+        with open(settings_file, 'r') as f:
+            return json.load(f)
+    else:
+        # Default settings
+        default = {
+            'default_dns': '1.1.1.1',
+            'global_override_enabled': False,
+            'global_override_ip': '192.168.14.190'
+        }
+        with open(settings_file, 'w') as f:
+            json.dump(default, f)
+        return default
+
+def update_global_settings(settings):
+    """Update global DNS settings"""
+    settings_file = '/workspaces/httpl/sdcard/blserver/conf/global_dns.json'
+    with open(settings_file, 'w') as f:
+        json.dump(settings, f)
+    
+    # Update all active DNS configurations
+    for user_dir in glob.glob('/workspaces/httpl/sdcard/blserver/conf/users/*/'):
+        user_id = os.path.basename(os.path.dirname(user_dir))
+        update_user_dns(user_id)
+
+def get_user_settings(user_id):
+    """Get user-specific DNS settings"""
+    settings_file = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/settings.json'
+    if os.path.exists(settings_file):
+        with open(settings_file, 'r') as f:
+            return json.load(f)
+    else:
+        # Default user settings
+        default = {
+            'override_enabled': False,
+            'override_ip': '',
+            'custom_domains': {}  # Domain -> IP mapping
+        }
+        return default
+
+def create_user_dns(user_id, ip_address):
+    """Create DNS configuration for a user"""
+    # Create user directory
+    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    os.makedirs(user_dir, exist_ok=True)
+    
+    # Save IP address
+    with open(f'{user_dir}/ip.txt', 'w') as f:
+        f.write(ip_address)
+    
+    # Create default settings
+    settings = get_user_settings(user_id)
+    with open(f'{user_dir}/settings.json', 'w') as f:
+        json.dump(settings, f)
+    
+    # Generate port number (10530 + user count)
+    user_count = len(glob.glob('/workspaces/httpl/sdcard/blserver/conf/users/*/'))
+    port = 10530 + user_count - 1
+    
+    # Save port
+    with open(f'{user_dir}/port.txt', 'w') as f:
+        f.write(str(port))
+    
+    # Generate dnsmasq config
+    update_user_dns(user_id)
+    
+    # Setup iptables
+    setup_iptables(user_id, ip_address, port)
+    
+    # Start dnsmasq
+    start_user_dnsmasq(user_id)
+    
+    return True
+
+def update_user_dns(user_id):
+    """Update DNS configuration for a user"""
+    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    
+    # Get user settings
+    user_settings = get_user_settings(user_id)
+    global_settings = get_global_settings()
+    
+    # Get IP and port
+    with open(f'{user_dir}/ip.txt', 'r') as f:
+        ip_address = f.read().strip()
+    
+    with open(f'{user_dir}/port.txt', 'r') as f:
+        port = f.read().strip()
+    
+    # Generate dnsmasq config
+    config = f"""port={port}
+no-resolv
+log-facility=/workspaces/httpl/sdcard/blserver/logs/dnsmasq-{user_id}.log
+pid-file=/workspaces/httpl/sdcard/blserver/pids/dnsmasq-{user_id}.pid
+"""
+    
+    # Determine which DNS server to use as default
+    if user_settings['override_enabled'] and user_settings['override_ip']:
+        # User has specific override
+        default_ip = user_settings['override_ip']
+    elif global_settings['global_override_enabled']:
+        # Global override is enabled
+        default_ip = global_settings['global_override_ip']
+    else:
+        # Use default DNS (1.1.1.1)
+        config += f"server={global_settings['default_dns']}\n"
+        default_ip = None
+    
+    # Add default IP if set
+    if default_ip:
+        config += f"address=/./{default_ip}\n"
+    
+    # Add custom domain mappings
+    for domain, ip in user_settings['custom_domains'].items():
+        config += f"address=/{domain}/{ip}\n"
+    
+    # Write config
+    with open(f'{user_dir}/dnsmasq.conf', 'w') as f:
+        f.write(config)
+    
+    # Restart dnsmasq if it's running
+    restart_user_dnsmasq(user_id)
+    
+    return True
+
+def setup_iptables(user_id, ip_address, port):
+    """Setup iptables rules for a user"""
+    try:
+        # In a real Android environment, we would use 'su -c' here
+        # For simulation purposes, we'll just print the commands
+        
+        # Clear any existing rules for this IP
+        cmd1 = f"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}"
+        cmd2 = f"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}"
+        
+        # Add new rules at the top of the chain
+        cmd3 = f"iptables -t nat -I PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}"
+        cmd4 = f"iptables -t nat -I PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}"
+        
+        print(f"[IPTABLES] Would execute: {cmd1}")
+        print(f"[IPTABLES] Would execute: {cmd2}")
+        print(f"[IPTABLES] Would execute: {cmd3}")
+        print(f"[IPTABLES] Would execute: {cmd4}")
+        
+        # For testing purposes, we'll write these commands to a file
+        with open(f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/iptables_commands.sh', 'w') as f:
+            f.write(f"#!/bin/bash\n")
+            f.write(f"# Commands to set up iptables for user {user_id}\n")
+            f.write(f"{cmd1} 2>/dev/null\n")
+            f.write(f"{cmd2} 2>/dev/null\n")
+            f.write(f"{cmd3}\n")
+            f.write(f"{cmd4}\n")
+        
+        return True
+    except Exception as e:
+        print(f"Error setting up iptables: {e}")
+        return False
+
+def start_user_dnsmasq(user_id):
+    """Start dnsmasq for a user"""
+    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    config_file = f'{user_dir}/dnsmasq.conf'
+    
+    try:
+        # In a real Android environment, we would use 'su -c' here
+        # For simulation purposes, we'll just print the command
+        cmd = f"dnsmasq --conf-file={config_file}"
+        print(f"[DNSMASQ] Would execute: {cmd}")
+        
+        # For testing purposes, we'll write this command to a file
+        with open(f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/start_dnsmasq.sh', 'w') as f:
+            f.write(f"#!/bin/bash\n")
+            f.write(f"# Command to start dnsmasq for user {user_id}\n")
+            f.write(f"{cmd}\n")
+        
+        return True
+    except Exception as e:
+        print(f"Error starting dnsmasq: {e}")
+        return False
+
+def stop_user_dnsmasq(user_id):
+    """Stop dnsmasq for a user"""
+    pid_file = f'/workspaces/httpl/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
+    
+    try:
+        # In a real Android environment, we would use 'su -c' here
+        # For simulation purposes, we'll just print the command
+        if os.path.exists(pid_file):
+            with open(pid_file, 'r') as f:
+                pid = f.read().strip()
+            cmd = f"kill {pid}"
+            print(f"[DNSMASQ] Would execute: {cmd}")
+            
+            # For testing purposes, we'll write this command to a file
+            with open(f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/stop_dnsmasq.sh', 'w') as f:
+                f.write(f"#!/bin/bash\n")
+                f.write(f"# Command to stop dnsmasq for user {user_id}\n")
+                f.write(f"{cmd}\n")
+        
+        return True
+    except Exception as e:
+        print(f"Error stopping dnsmasq: {e}")
+        return False
+
+def restart_user_dnsmasq(user_id):
+    """Restart dnsmasq for a user"""
+    stop_user_dnsmasq(user_id)
+    return start_user_dnsmasq(user_id)
+
+def delete_user_dns(user_id):
+    """Delete DNS configuration for a user"""
+    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    
+    try:
+        # Get IP address and port
+        with open(f'{user_dir}/ip.txt', 'r') as f:
+            ip_address = f.read().strip()
+        
+        with open(f'{user_dir}/port.txt', 'r') as f:
+            port = f.read().strip()
+        
+        # Stop dnsmasq
+        stop_user_dnsmasq(user_id)
+        
+        # Remove iptables rules
+        cmd1 = f"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}"
+        cmd2 = f"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}"
+        
+        print(f"[IPTABLES] Would execute: {cmd1}")
+        print(f"[IPTABLES] Would execute: {cmd2}")
+        
+        # Remove user directory
+        shutil.rmtree(user_dir)
+        
+        return True
+    except Exception as e:
+        print(f"Error deleting user DNS: {e}")
+        return False

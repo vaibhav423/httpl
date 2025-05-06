@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User DNS Settings</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        button, .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .button-red {
+            background-color: #f44336;
+        }
+        .button-blue {
+            background-color: #2196F3;
+        }
+        input[type=text], select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+        }
+        .checkbox-container input {
+            margin-right: 10px;
+        }
+        .domain-entry {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .domain-entry input {
+            flex: 1;
+        }
+        .domain-entry button {
+            flex: 0 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DNS Settings for {{ ip }}</h1>
+        
+        <div class="card">
+            <form action="/user/{{ user_id }}" method="post">
+                <div class="form-group checkbox-container">
+                    <input type="checkbox" id="override_enabled" name="override_enabled" {% if settings.override_enabled %}checked{% endif %}>
+                    <label for="override_enabled">Override Global DNS Settings</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="override_ip">Override IP Address:</label>
+                    <input type="text" id="override_ip" name="override_ip" value="{{ settings.override_ip }}">
+                    <small>All domains will resolve to this IP if override is enabled</small>
+                </div>
+                
+                <h3>Custom Domain Mappings</h3>
+                <p>Specify custom IP addresses for specific domains</p>
+                
+                <div id="domain-mappings">
+                    {% for domain, ip in settings.custom_domains.items() %}
+                    <div class="domain-entry">
+                        <input type="text" name="domain_{{ loop.index }}" placeholder="Domain" value="{{ domain }}">
+                        <input type="text" name="domain_ip_{{ loop.index }}" placeholder="IP Address" value="{{ ip }}">
+                        <button type="button" class="button button-red" onclick="this.parentElement.remove()">Remove</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <button type="button" class="button button-blue" onclick="addDomainMapping()">Add Domain</button>
+                
+                <div class="form-group" style="margin-top: 20px;">
+                    <button type="submit" class="button">Save Settings</button>
+                    <a href="/" class="button" style="background-color: #ccc;">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize domain count from existing entries
+        let domainCount = 0;
+        // Count existing domain entries
+        document.querySelectorAll('.domain-entry').forEach(function() {
+            domainCount++;
+        });
+        
+        function addDomainMapping() {
+            domainCount++;
+            
+            const domainMappings = document.getElementById('domain-mappings');
+            const domainEntry = document.createElement('div');
+            domainEntry.className = 'domain-entry';
+            
+            const domainInput = document.createElement('input');
+            domainInput.type = 'text';
+            domainInput.name = `domain_${domainCount}`;
+            domainInput.placeholder = 'Domain';
+            
+            const ipInput = document.createElement('input');
+            ipInput.type = 'text';
+            ipInput.name = `domain_ip_${domainCount}`;
+            ipInput.placeholder = 'IP Address';
+            
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'button button-red';
+            removeButton.textContent = 'Remove';
+            removeButton.onclick = function() {
+                domainEntry.remove();
+            };
+            
+            domainEntry.appendChild(domainInput);
+            domainEntry.appendChild(ipInput);
+            domainEntry.appendChild(removeButton);
+            
+            domainMappings.appendChild(domainEntry);
+        }
+    </script>
+</body>
+</html>
