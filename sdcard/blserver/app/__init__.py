@@ -4,10 +4,10 @@ def create_app():
     app = Flask(__name__)
     app.config.from_mapping(
         SECRET_KEY='dev',
-        DATABASE='/workspaces/httpl/sdcard/blserver/database.db',
-        CONFIG_DIR='/workspaces/httpl/sdcard/blserver/conf',
-        LOGS_DIR='/workspaces/httpl/sdcard/blserver/logs',
-        PIDS_DIR='/workspaces/httpl/sdcard/blserver/pids',
+        DATABASE='/sdcard/blserver/database.db',
+        CONFIG_DIR='/sdcard/blserver/conf',
+        LOGS_DIR='/sdcard/blserver/logs',
+        PIDS_DIR='/sdcard/blserver/pids',
         DEFAULT_DNS='1.1.1.1',
         FAKE_IP='192.168.14.190'
     )

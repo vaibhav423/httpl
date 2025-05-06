@@ -17,7 +17,7 @@ def index():
     
     # Get active users
     users = []
-    for user_dir in glob.glob('/workspaces/httpl/sdcard/blserver/conf/users/*/'):
+    for user_dir in glob.glob('/sdcard/blserver/conf/users/*/'):
         user_id = os.path.basename(os.path.dirname(user_dir))
         user_ip_file = f"{user_dir}/ip.txt"
         if os.path.exists(user_ip_file):
@@ -80,7 +80,7 @@ def user_settings(user_id):
         settings['custom_domains'] = domains
         
         # Save settings
-        user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+        user_dir = f'/sdcard/blserver/conf/users/{user_id}'
         os.makedirs(user_dir, exist_ok=True)
         with open(f'{user_dir}/settings.json', 'w') as f:
             json.dump(settings, f)
@@ -92,7 +92,7 @@ def user_settings(user_id):
     
     # Get user settings
     settings = dns_manager.get_user_settings(user_id)
-    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     with open(f'{user_dir}/ip.txt', 'r') as f:
         ip = f.read().strip()
     

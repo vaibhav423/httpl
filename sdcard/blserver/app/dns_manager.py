@@ -6,7 +6,7 @@ import shutil
 
 def get_global_settings():
     """Get global DNS settings"""
-    settings_file = '/workspaces/httpl/sdcard/blserver/conf/global_dns.json'
+    settings_file = '/sdcard/blserver/conf/global_dns.json'
     if os.path.exists(settings_file):
         with open(settings_file, 'r') as f:
             return json.load(f)
@@ -23,18 +23,18 @@ def get_global_settings():
 
 def update_global_settings(settings):
     """Update global DNS settings"""
-    settings_file = '/workspaces/httpl/sdcard/blserver/conf/global_dns.json'
+    settings_file = '/sdcard/blserver/conf/global_dns.json'
     with open(settings_file, 'w') as f:
         json.dump(settings, f)
     
     # Update all active DNS configurations
-    for user_dir in glob.glob('/workspaces/httpl/sdcard/blserver/conf/users/*/'):
+    for user_dir in glob.glob('/sdcard/blserver/conf/users/*/'):
         user_id = os.path.basename(os.path.dirname(user_dir))
         update_user_dns(user_id)
 
 def get_user_settings(user_id):
     """Get user-specific DNS settings"""
-    settings_file = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/settings.json'
+    settings_file = f'/sdcard/blserver/conf/users/{user_id}/settings.json'
     if os.path.exists(settings_file):
         with open(settings_file, 'r') as f:
             return json.load(f)
@@ -50,7 +50,7 @@ def get_user_settings(user_id):
 def create_user_dns(user_id, ip_address):
     """Create DNS configuration for a user"""
     # Create user directory
-    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     os.makedirs(user_dir, exist_ok=True)
     
     # Save IP address
@@ -63,7 +63,7 @@ def create_user_dns(user_id, ip_address):
         json.dump(settings, f)
     
     # Generate port number (10530 + user count)
-    user_count = len(glob.glob('/workspaces/httpl/sdcard/blserver/conf/users/*/'))
+    user_count = len(glob.glob('/sdcard/blserver/conf/users/*/'))
     port = 10530 + user_count - 1
     
     # Save port
@@ -83,7 +83,7 @@ def create_user_dns(user_id, ip_address):
 
 def update_user_dns(user_id):
     """Update DNS configuration for a user"""
-    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     
     # Get user settings
     user_settings = get_user_settings(user_id)
@@ -99,8 +99,8 @@ def update_user_dns(user_id):
     # Generate dnsmasq config
     config = f"""port={port}
 no-resolv
-log-facility=/workspaces/httpl/sdcard/blserver/logs/dnsmasq-{user_id}.log
-pid-file=/workspaces/httpl/sdcard/blserver/pids/dnsmasq-{user_id}.pid
+log-facility=/sdcard/blserver/logs/dnsmasq-{user_id}.log
+pid-file=/sdcard/blserver/pids/dnsmasq-{user_id}.pid
 """
     
     # Determine which DNS server to use as default
@@ -152,7 +152,7 @@ def setup_iptables(user_id, ip_address, port):
         print(f"[IPTABLES] Would execute: {cmd4}")
         
         # For testing purposes, we'll write these commands to a file
-        with open(f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/iptables_commands.sh', 'w') as f:
+        with open(f'/sdcard/blserver/conf/users/{user_id}/iptables_commands.sh', 'w') as f:
             f.write(f"#!/bin/bash\n")
             f.write(f"# Commands to set up iptables for user {user_id}\n")
             f.write(f"{cmd1} 2>/dev/null\n")
@@ -167,7 +167,7 @@ def setup_iptables(user_id, ip_address, port):
 
 def start_user_dnsmasq(user_id):
     """Start dnsmasq for a user"""
-    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     config_file = f'{user_dir}/dnsmasq.conf'
     
     try:
@@ -177,7 +177,7 @@ def start_user_dnsmasq(user_id):
         print(f"[DNSMASQ] Would execute: {cmd}")
         
         # For testing purposes, we'll write this command to a file
-        with open(f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/start_dnsmasq.sh', 'w') as f:
+        with open(f'/sdcard/blserver/conf/users/{user_id}/start_dnsmasq.sh', 'w') as f:
             f.write(f"#!/bin/bash\n")
             f.write(f"# Command to start dnsmasq for user {user_id}\n")
             f.write(f"{cmd}\n")
@@ -189,7 +189,7 @@ def start_user_dnsmasq(user_id):
 
 def stop_user_dnsmasq(user_id):
     """Stop dnsmasq for a user"""
-    pid_file = f'/workspaces/httpl/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
+    pid_file = f'/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
     
     try:
         # In a real Android environment, we would use 'su -c' here
@@ -201,7 +201,7 @@ def stop_user_dnsmasq(user_id):
             print(f"[DNSMASQ] Would execute: {cmd}")
             
             # For testing purposes, we'll write this command to a file
-            with open(f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/stop_dnsmasq.sh', 'w') as f:
+            with open(f'/sdcard/blserver/conf/users/{user_id}/stop_dnsmasq.sh', 'w') as f:
                 f.write(f"#!/bin/bash\n")
                 f.write(f"# Command to stop dnsmasq for user {user_id}\n")
                 f.write(f"{cmd}\n")
@@ -218,7 +218,7 @@ def restart_user_dnsmasq(user_id):
 
 def delete_user_dns(user_id):
     """Delete DNS configuration for a user"""
-    user_dir = f'/workspaces/httpl/sdcard/blserver/conf/users/{user_id}'
+    user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     
     try:
         # Get IP address and port

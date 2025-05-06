@@ -103,9 +103,9 @@ def get_hostname(ip):
 def check_if_dns_exists(ip):
     """Check if DNS configuration exists for this IP"""
     # Check if any user has this IP
-    for user_dir in glob.glob('/workspaces/httpl/sdcard/blserver/conf/users/*/'):
+    for user_dir in glob.glob('/sdcard/blserver/conf/users/*/'):
         user_id = os.path.basename(os.path.dirname(user_dir))
-        user_ip_file = f"/workspaces/httpl/sdcard/blserver/conf/users/{user_id}/ip.txt"
+        user_ip_file = f"/sdcard/blserver/conf/users/{user_id}/ip.txt"
         if os.path.exists(user_ip_file):
             with open(user_ip_file, 'r') as f:
                 if f.read().strip() == ip:

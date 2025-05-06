@@ -14,9 +14,9 @@ app = create_app()
 
 if __name__ == '__main__':
     # Create necessary directories if they don't exist
-    os.makedirs('/workspaces/httpl/sdcard/blserver/conf/users', exist_ok=True)
-    os.makedirs('/workspaces/httpl/sdcard/blserver/logs', exist_ok=True)
-    os.makedirs('/workspaces/httpl/sdcard/blserver/pids', exist_ok=True)
+    os.makedirs('/sdcard/blserver/conf/users', exist_ok=True)
+    os.makedirs('/sdcard/blserver/logs', exist_ok=True)
+    os.makedirs('/sdcard/blserver/pids', exist_ok=True)
     
     # Get port from command line arguments or use default
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
