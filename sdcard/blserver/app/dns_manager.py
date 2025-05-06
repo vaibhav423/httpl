@@ -267,7 +267,19 @@ def start_user_dnsmasq(user_id):
                 port = str(new_port)
         
         # Now try to start dnsmasq with the (possibly updated) port
-        cmd = f"su -c \"dnsmasq --conf-file={config_file}\""
+        pid_file = f'/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
+        
+        # Make sure the PID directory exists and has the right permissions
+        pid_dir = os.path.dirname(pid_file)
+        os.makedirs(pid_dir, exist_ok=True)
+        subprocess.call(f"su -c \"chmod 777 {pid_dir}\"", shell=True)
+        
+        # Create an empty PID file with the right permissions
+        with open(pid_file, 'w') as f:
+            pass
+        subprocess.call(f"su -c \"chmod 666 {pid_file}\"", shell=True)
+        
+        cmd = f"su -c \"dnsmasq --conf-file={config_file} --pid-file={pid_file}\""
         
         # Execute the command
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -283,7 +295,7 @@ def start_user_dnsmasq(user_id):
             import random
             random_port = random.randint(20000, 30000)
             
-            cmd_random = f"su -c \"dnsmasq --port={random_port} --conf-file={config_file}\""
+            cmd_random = f"su -c \"dnsmasq --port={random_port} --conf-file={config_file} --pid-file={pid_file}\""
             print(f"[DNSMASQ] Trying with random port {random_port}: {cmd_random}")
             
             result_random = subprocess.run(cmd_random, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
