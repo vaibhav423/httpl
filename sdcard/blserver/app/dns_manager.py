@@ -183,38 +183,148 @@ def start_user_dnsmasq(user_id):
     config_file = f'{user_dir}/dnsmasq.conf'
     
     try:
-        # Kill any existing dnsmasq process for this user
-        try:
-            with open(f'{user_dir}/port.txt', 'r') as f:
-                port = f.read().strip()
-            cmd_kill = f"su -c \"pkill -f 'dnsmasq.*{port}'\""
-            subprocess.call(cmd_kill, shell=True, stderr=subprocess.DEVNULL)
-        except Exception as e:
-            print(f"[DNSMASQ] Error cleaning up old process: {e}")
+        # Get the port from the config file
+        with open(f'{user_dir}/port.txt', 'r') as f:
+            port = f.read().strip()
         
-        # Try a much simpler approach - just run dnsmasq directly
+        # Check if the port is already in use
+        check_port_cmd = f"su -c \"netstat -tuln | grep :{port}\""
+        port_check = subprocess.run(check_port_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        if port_check.returncode == 0:
+            print(f"[DNSMASQ] Port {port} is already in use. Attempting to free it...")
+            
+            # Try to find what process is using the port
+            find_process_cmd = f"su -c \"lsof -i :{port}\""
+            process_check = subprocess.run(find_process_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            if process_check.returncode == 0:
+                process_output = process_check.stdout.decode('utf-8')
+                print(f"[DNSMASQ] Process using port {port}: {process_output}")
+                
+                # Try to kill the process
+                kill_cmd = f"su -c \"fuser -k {port}/tcp; fuser -k {port}/udp\""
+                subprocess.run(kill_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                print(f"[DNSMASQ] Attempted to kill processes using port {port}")
+            
+            # Also try to kill any dnsmasq process
+            kill_dnsmasq_cmd = f"su -c \"pkill dnsmasq\""
+            subprocess.run(kill_dnsmasq_cmd, shell=True, stderr=subprocess.DEVNULL)
+            
+            # Wait a moment for the port to be freed
+            import time
+            time.sleep(1)
+            
+            # Check again if the port is free
+            port_check = subprocess.run(check_port_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if port_check.returncode == 0:
+                print(f"[DNSMASQ] Port {port} is still in use. Trying a different port...")
+                
+                # Generate a new port number
+                new_port = int(port) + 1000  # Add 1000 to avoid conflicts
+                
+                # Update the port in the config file
+                with open(f'{user_dir}/port.txt', 'w') as f:
+                    f.write(str(new_port))
+                
+                # Update the dnsmasq config with the new port
+                with open(config_file, 'r') as f:
+                    config_content = f.read()
+                
+                config_content = config_content.replace(f"port={port}", f"port={new_port}")
+                
+                with open(config_file, 'w') as f:
+                    f.write(config_content)
+                
+                print(f"[DNSMASQ] Updated port to {new_port}")
+                
+                # Update iptables rules for the new port
+                with open(f'{user_dir}/ip.txt', 'r') as f:
+                    ip_address = f.read().strip()
+                
+                # Remove old iptables rules
+                cmd1 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}\""
+                cmd2 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}\""
+                
+                try:
+                    subprocess.call(cmd1, shell=True, stderr=subprocess.DEVNULL)
+                    subprocess.call(cmd2, shell=True, stderr=subprocess.DEVNULL)
+                except:
+                    pass
+                
+                # Add new iptables rules
+                cmd3 = f"su -c \"iptables -t nat -I PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {new_port}\""
+                cmd4 = f"su -c \"iptables -t nat -I PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {new_port}\""
+                
+                try:
+                    subprocess.check_call(cmd3, shell=True)
+                    subprocess.check_call(cmd4, shell=True)
+                    print(f"[IPTABLES] Updated rules for {ip_address} to port {new_port}")
+                except Exception as e:
+                    print(f"[IPTABLES] Error updating rules: {e}")
+                
+                # Update the port variable for the rest of the function
+                port = str(new_port)
+        
+        # Now try to start dnsmasq with the (possibly updated) port
         cmd = f"su -c \"dnsmasq --conf-file={config_file}\""
         
         # Execute the command
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         if result.returncode == 0:
-            print(f"[DNSMASQ] Started dnsmasq for user {user_id}")
+            print(f"[DNSMASQ] Started dnsmasq for user {user_id} on port {port}")
             return True
         else:
             stderr = result.stderr.decode('utf-8')
             print(f"[DNSMASQ] Failed to start dnsmasq: {stderr}")
             
-            # Try with --no-daemon to see if that helps with debugging
-            cmd_debug = f"su -c \"dnsmasq --conf-file={config_file} --no-daemon\""
-            print(f"[DNSMASQ] Trying with --no-daemon: {cmd_debug}")
-            result_debug = subprocess.run(cmd_debug, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2)
-            stdout = result_debug.stdout.decode('utf-8')
-            stderr = result_debug.stderr.decode('utf-8')
-            print(f"[DNSMASQ] Debug output: {stdout}")
-            print(f"[DNSMASQ] Debug error: {stderr}")
+            # As a last resort, try running dnsmasq with a completely random port
+            import random
+            random_port = random.randint(20000, 30000)
             
-            return False
+            cmd_random = f"su -c \"dnsmasq --port={random_port} --conf-file={config_file}\""
+            print(f"[DNSMASQ] Trying with random port {random_port}: {cmd_random}")
+            
+            result_random = subprocess.run(cmd_random, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            if result_random.returncode == 0:
+                print(f"[DNSMASQ] Successfully started dnsmasq with random port {random_port}")
+                
+                # Update the port file
+                with open(f'{user_dir}/port.txt', 'w') as f:
+                    f.write(str(random_port))
+                
+                # Update iptables rules for the random port
+                with open(f'{user_dir}/ip.txt', 'r') as f:
+                    ip_address = f.read().strip()
+                
+                # Remove old iptables rules
+                cmd1 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}\""
+                cmd2 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}\""
+                
+                try:
+                    subprocess.call(cmd1, shell=True, stderr=subprocess.DEVNULL)
+                    subprocess.call(cmd2, shell=True, stderr=subprocess.DEVNULL)
+                except:
+                    pass
+                
+                # Add new iptables rules
+                cmd3 = f"su -c \"iptables -t nat -I PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {random_port}\""
+                cmd4 = f"su -c \"iptables -t nat -I PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {random_port}\""
+                
+                try:
+                    subprocess.check_call(cmd3, shell=True)
+                    subprocess.check_call(cmd4, shell=True)
+                    print(f"[IPTABLES] Updated rules for {ip_address} to port {random_port}")
+                except Exception as e:
+                    print(f"[IPTABLES] Error updating rules: {e}")
+                
+                return True
+            else:
+                stderr_random = result_random.stderr.decode('utf-8')
+                print(f"[DNSMASQ] Failed to start dnsmasq with random port: {stderr_random}")
+                return False
         
         return True
     except Exception as e:
