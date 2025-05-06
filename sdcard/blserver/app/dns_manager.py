@@ -135,30 +135,30 @@ pid-file=/sdcard/blserver/pids/dnsmasq-{user_id}.pid
 def setup_iptables(user_id, ip_address, port):
     """Setup iptables rules for a user"""
     try:
-        # In a real Android environment, we would use 'su -c' here
-        # For simulation purposes, we'll just print the commands
-        
         # Clear any existing rules for this IP
-        cmd1 = f"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}"
-        cmd2 = f"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}"
+        cmd1 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}\""
+        cmd2 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}\""
         
         # Add new rules at the top of the chain
-        cmd3 = f"iptables -t nat -I PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}"
-        cmd4 = f"iptables -t nat -I PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}"
+        cmd3 = f"su -c \"iptables -t nat -I PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}\""
+        cmd4 = f"su -c \"iptables -t nat -I PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}\""
         
-        print(f"[IPTABLES] Would execute: {cmd1}")
-        print(f"[IPTABLES] Would execute: {cmd2}")
-        print(f"[IPTABLES] Would execute: {cmd3}")
-        print(f"[IPTABLES] Would execute: {cmd4}")
+        # Execute commands
+        try:
+            subprocess.call(cmd1, shell=True, stderr=subprocess.DEVNULL)
+        except:
+            pass  # Ignore errors if rule doesn't exist
+            
+        try:
+            subprocess.call(cmd2, shell=True, stderr=subprocess.DEVNULL)
+        except:
+            pass  # Ignore errors if rule doesn't exist
+            
+        # These must succeed
+        subprocess.check_call(cmd3, shell=True)
+        subprocess.check_call(cmd4, shell=True)
         
-        # For testing purposes, we'll write these commands to a file
-        with open(f'/sdcard/blserver/conf/users/{user_id}/iptables_commands.sh', 'w') as f:
-            f.write(f"#!/bin/bash\n")
-            f.write(f"# Commands to set up iptables for user {user_id}\n")
-            f.write(f"{cmd1} 2>/dev/null\n")
-            f.write(f"{cmd2} 2>/dev/null\n")
-            f.write(f"{cmd3}\n")
-            f.write(f"{cmd4}\n")
+        print(f"[IPTABLES] Successfully set up rules for {ip_address} to port {port}")
         
         return True
     except Exception as e:
@@ -171,16 +171,10 @@ def start_user_dnsmasq(user_id):
     config_file = f'{user_dir}/dnsmasq.conf'
     
     try:
-        # In a real Android environment, we would use 'su -c' here
-        # For simulation purposes, we'll just print the command
-        cmd = f"dnsmasq --conf-file={config_file}"
-        print(f"[DNSMASQ] Would execute: {cmd}")
-        
-        # For testing purposes, we'll write this command to a file
-        with open(f'/sdcard/blserver/conf/users/{user_id}/start_dnsmasq.sh', 'w') as f:
-            f.write(f"#!/bin/bash\n")
-            f.write(f"# Command to start dnsmasq for user {user_id}\n")
-            f.write(f"{cmd}\n")
+        # Execute dnsmasq with su privileges
+        cmd = f"su -c \"dnsmasq --conf-file={config_file}\""
+        subprocess.check_call(cmd, shell=True)
+        print(f"[DNSMASQ] Started dnsmasq for user {user_id}")
         
         return True
     except Exception as e:
@@ -192,19 +186,21 @@ def stop_user_dnsmasq(user_id):
     pid_file = f'/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
     
     try:
-        # In a real Android environment, we would use 'su -c' here
-        # For simulation purposes, we'll just print the command
         if os.path.exists(pid_file):
             with open(pid_file, 'r') as f:
                 pid = f.read().strip()
-            cmd = f"kill {pid}"
-            print(f"[DNSMASQ] Would execute: {cmd}")
-            
-            # For testing purposes, we'll write this command to a file
-            with open(f'/sdcard/blserver/conf/users/{user_id}/stop_dnsmasq.sh', 'w') as f:
-                f.write(f"#!/bin/bash\n")
-                f.write(f"# Command to stop dnsmasq for user {user_id}\n")
-                f.write(f"{cmd}\n")
+            cmd = f"su -c \"kill {pid}\""
+            subprocess.call(cmd, shell=True)
+            print(f"[DNSMASQ] Stopped dnsmasq for user {user_id}")
+        else:
+            # Try to find and kill by process name and port
+            user_dir = f'/sdcard/blserver/conf/users/{user_id}'
+            if os.path.exists(f'{user_dir}/port.txt'):
+                with open(f'{user_dir}/port.txt', 'r') as f:
+                    port = f.read().strip()
+                cmd = f"su -c \"pkill -f 'dnsmasq.*{port}'\""
+                subprocess.call(cmd, shell=True)
+                print(f"[DNSMASQ] Attempted to stop dnsmasq for user {user_id} by port {port}")
         
         return True
     except Exception as e:
@@ -232,11 +228,15 @@ def delete_user_dns(user_id):
         stop_user_dnsmasq(user_id)
         
         # Remove iptables rules
-        cmd1 = f"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}"
-        cmd2 = f"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}"
+        cmd1 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p udp --dport 53 -j REDIRECT --to-port {port}\""
+        cmd2 = f"su -c \"iptables -t nat -D PREROUTING -s {ip_address} -p tcp --dport 53 -j REDIRECT --to-port {port}\""
         
-        print(f"[IPTABLES] Would execute: {cmd1}")
-        print(f"[IPTABLES] Would execute: {cmd2}")
+        try:
+            subprocess.call(cmd1, shell=True, stderr=subprocess.DEVNULL)
+            subprocess.call(cmd2, shell=True, stderr=subprocess.DEVNULL)
+            print(f"[IPTABLES] Removed rules for {ip_address}")
+        except Exception as e:
+            print(f"[IPTABLES] Error removing rules: {e}")
         
         # Remove user directory
         shutil.rmtree(user_dir)

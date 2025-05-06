@@ -12,9 +12,6 @@ def index():
     # Get global settings
     global_settings = dns_manager.get_global_settings()
     
-    # Get network interfaces
-    interfaces = network_scanner.get_network_interfaces()
-    
     # Get active users
     users = []
     for user_dir in glob.glob('/sdcard/blserver/conf/users/*/'):
@@ -31,13 +28,12 @@ def index():
     
     return render_template('index.html', 
                           global_settings=global_settings,
-                          interfaces=interfaces,
                           users=users)
 
-@bp.route('/scan/<interface>')
-def scan(interface):
-    """Scan network for devices"""
-    devices = network_scanner.scan_network(interface)
+@bp.route('/scan')
+def scan():
+    """Scan network for devices on ap0 interface"""
+    devices = network_scanner.scan_network("ap0")
     return jsonify(devices)
 
 @bp.route('/global-settings', methods=['POST'])

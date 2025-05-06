@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/system/bin/sh
 # DNS Controller Installation Script for Android
 # This script should be run on a rooted Android device
 
@@ -66,6 +66,19 @@ python3 run.py
 EOF
 chmod +x $BASE_DIR/start.sh
 
+# Create a service script for init.d
+echo "Creating service script..."
+cat > /system/etc/init.d/dns_controller << EOF
+#!/system/bin/sh
+# DNS Controller Service
+# This script starts the DNS Controller service at boot
+
+# Start the service
+su -c "cd $BASE_DIR && python3 run.py &"
+EOF
+chmod +x /system/etc/init.d/dns_controller
+
 echo "Installation complete!"
-echo "To start the DNS Controller, run: sh $BASE_DIR/start.sh"
-echo "Then open a web browser and navigate to: http://localhost:5000"
+echo "To start the DNS Controller manually, run: su -c 'sh $BASE_DIR/start.sh'"
+echo "The service will also start automatically at boot."
+echo "Open a web browser and navigate to: http://localhost:5000"

@@ -4,11 +4,11 @@ import socket
 import os
 import glob
 
-def get_interface_ip(ifname):
+def get_interface_ip(ifname="ap0"):
     """Get IP address of a network interface"""
     try:
         # For Android/Linux
-        cmd = f"ip addr show {ifname} | grep 'inet ' | awk '{{print $2}}' | cut -d/ -f1"
+        cmd = f"su -c \"ip addr show {ifname} | grep 'inet ' | awk '{{print $2}}' | cut -d/ -f1\""
         result = subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
         return result
     except Exception as e:
@@ -16,23 +16,10 @@ def get_interface_ip(ifname):
         return None
 
 def get_network_interfaces():
-    """Get list of network interfaces"""
-    interfaces = []
-    try:
-        # For Android/Linux
-        output = subprocess.check_output("ip link show | grep -v lo | grep 'state UP'", shell=True).decode('utf-8')
-        pattern = r'\d+: ([^:@]+)[@:]'
-        for line in output.split('\n'):
-            match = re.search(pattern, line)
-            if match and match.group(1) != 'lo':
-                interfaces.append(match.group(1))
-    except Exception as e:
-        print(f"Error getting interfaces: {e}")
-        # Fallback to common interfaces
-        interfaces = ['wlan0', 'eth0', 'ap0']
-    return interfaces
+    """Get list of network interfaces - only returns ap0 for Android hotspot"""
+    return ['ap0']
 
-def scan_network(interface):
+def scan_network(interface="ap0"):
     """Scan network for connected devices"""
     devices = []
     try:
@@ -44,7 +31,7 @@ def scan_network(interface):
         subnet = '.'.join(ip.split('.')[0:3]) + '.'
         
         # Run ARP scan (works on Android with root)
-        cmd = f"ip neigh show dev {interface}"
+        cmd = f"su -c \"ip neigh show dev {interface}\""
         output = subprocess.check_output(cmd, shell=True).decode('utf-8')
         
         # Parse output
@@ -74,8 +61,10 @@ def scan_network(interface):
             # Ping scan (slower but more compatible)
             for i in range(1, 255):
                 target_ip = f"{subnet}{i}"
+                cmd = f"su -c \"ping -c 1 -W 1 {target_ip}\""
                 response = subprocess.call(
-                    ['ping', '-c', '1', '-W', '1', target_ip],
+                    cmd,
+                    shell=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
