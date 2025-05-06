@@ -96,11 +96,23 @@ def update_user_dns(user_id):
     with open(f'{user_dir}/port.txt', 'r') as f:
         port = f.read().strip()
     
-    # Generate dnsmasq config
+    # Create logs and pids directories with proper permissions
+    logs_dir = '/sdcard/blserver/logs'
+    pids_dir = '/sdcard/blserver/pids'
+    os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(pids_dir, exist_ok=True)
+    
+    try:
+        # Set permissions for directories
+        subprocess.call(f"su -c \"chmod -R 777 {logs_dir}\"", shell=True)
+        subprocess.call(f"su -c \"chmod -R 777 {pids_dir}\"", shell=True)
+        subprocess.call(f"su -c \"chmod -R 777 {user_dir}\"", shell=True)
+    except Exception as e:
+        print(f"[WARNING] Failed to set permissions: {e}")
+    
+    # Generate a simplified dnsmasq config
     config = f"""port={port}
 no-resolv
-log-facility=/sdcard/blserver/logs/dnsmasq-{user_id}.log
-pid-file=/sdcard/blserver/pids/dnsmasq-{user_id}.pid
 """
     
     # Determine which DNS server to use as default
@@ -169,73 +181,39 @@ def start_user_dnsmasq(user_id):
     """Start dnsmasq for a user"""
     user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     config_file = f'{user_dir}/dnsmasq.conf'
-    pid_file = f'/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
-    log_file = f'/sdcard/blserver/logs/dnsmasq-{user_id}.log'
     
     try:
-        # Make sure the directories exist
-        os.makedirs(os.path.dirname(pid_file), exist_ok=True)
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        
-        # Set proper permissions for directories
-        subprocess.call(f"su -c \"chmod 777 {os.path.dirname(pid_file)}\"", shell=True)
-        subprocess.call(f"su -c \"chmod 777 {os.path.dirname(log_file)}\"", shell=True)
-        
         # Kill any existing dnsmasq process for this user
         try:
             with open(f'{user_dir}/port.txt', 'r') as f:
                 port = f.read().strip()
             cmd_kill = f"su -c \"pkill -f 'dnsmasq.*{port}'\""
             subprocess.call(cmd_kill, shell=True, stderr=subprocess.DEVNULL)
-            # Also try to kill by PID if the file exists
-            if os.path.exists(pid_file):
-                with open(pid_file, 'r') as f:
-                    pid = f.read().strip()
-                    if pid:
-                        subprocess.call(f"su -c \"kill {pid}\"", shell=True, stderr=subprocess.DEVNULL)
-                # Remove the old PID file
-                os.remove(pid_file)
         except Exception as e:
             print(f"[DNSMASQ] Error cleaning up old process: {e}")
         
-        # First, test the configuration
-        test_cmd = f"su -c \"dnsmasq --test --conf-file={config_file}\""
-        test_result = subprocess.run(test_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if test_result.returncode != 0:
-            print(f"[DNSMASQ] Configuration test failed: {test_result.stderr.decode('utf-8')}")
-            return False
+        # Try a much simpler approach - just run dnsmasq directly
+        cmd = f"su -c \"dnsmasq --conf-file={config_file}\""
         
-        # Execute dnsmasq with su privileges and explicit pid-file option
-        # Use a direct command that will work reliably on Android
-        cmd = f"su -c \"dnsmasq --conf-file={config_file} --pid-file={pid_file} --no-daemon\""
+        # Execute the command
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        # Start dnsmasq in a separate process
-        with open(f'{user_dir}/start_dnsmasq.sh', 'w') as f:
-            f.write(f"#!/system/bin/sh\n{cmd} > {log_file} 2>&1 &\n")
-        os.chmod(f'{user_dir}/start_dnsmasq.sh', 0o755)
-        
-        # Execute the script
-        subprocess.call(f"su -c \"sh {user_dir}/start_dnsmasq.sh\"", shell=True)
-        
-        # Give dnsmasq a moment to start up
-        import time
-        time.sleep(1)
-        
-        # Check if dnsmasq is running
-        check_cmd = f"su -c \"ps | grep dnsmasq | grep {user_id}\""
-        check_result = subprocess.run(check_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        if check_result.returncode == 0:
+        if result.returncode == 0:
             print(f"[DNSMASQ] Started dnsmasq for user {user_id}")
             return True
         else:
-            # Check the log file for errors
-            if os.path.exists(log_file):
-                with open(log_file, 'r') as f:
-                    log_content = f.read()
-                print(f"[DNSMASQ] Failed to start dnsmasq. Log content: {log_content}")
-            else:
-                print(f"[DNSMASQ] Failed to start dnsmasq and no log file found")
+            stderr = result.stderr.decode('utf-8')
+            print(f"[DNSMASQ] Failed to start dnsmasq: {stderr}")
+            
+            # Try with --no-daemon to see if that helps with debugging
+            cmd_debug = f"su -c \"dnsmasq --conf-file={config_file} --no-daemon\""
+            print(f"[DNSMASQ] Trying with --no-daemon: {cmd_debug}")
+            result_debug = subprocess.run(cmd_debug, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2)
+            stdout = result_debug.stdout.decode('utf-8')
+            stderr = result_debug.stderr.decode('utf-8')
+            print(f"[DNSMASQ] Debug output: {stdout}")
+            print(f"[DNSMASQ] Debug error: {stderr}")
+            
             return False
         
         return True
