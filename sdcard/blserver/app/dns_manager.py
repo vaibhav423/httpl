@@ -172,10 +172,33 @@ def start_user_dnsmasq(user_id):
     pid_file = f'/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
     
     try:
-        # Execute dnsmasq with su privileges and explicit pid-file option
-        cmd = f"su -c \"dnsmasq --conf-file={config_file} --pid-file={pid_file}\""
-        subprocess.check_call(cmd, shell=True)
-        print(f"[DNSMASQ] Started dnsmasq for user {user_id}")
+        # Make sure the directories exist
+        os.makedirs(os.path.dirname(pid_file), exist_ok=True)
+        
+        # Kill any existing dnsmasq process for this user
+        try:
+            with open(f'{user_dir}/port.txt', 'r') as f:
+                port = f.read().strip()
+            cmd_kill = f"su -c \"pkill -f 'dnsmasq.*{port}'\""
+            subprocess.call(cmd_kill, shell=True, stderr=subprocess.DEVNULL)
+        except:
+            pass
+        
+        # Execute dnsmasq with su privileges, explicit pid-file option, and nohup to keep it running
+        cmd = f"su -c \"nohup dnsmasq --conf-file={config_file} --pid-file={pid_file} > /dev/null 2>&1 &\""
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Give dnsmasq a moment to start up
+        import time
+        time.sleep(0.5)
+        
+        # Check if the process started successfully
+        if process.poll() is None:
+            print(f"[DNSMASQ] Started dnsmasq for user {user_id}")
+        else:
+            stdout, stderr = process.communicate()
+            print(f"[DNSMASQ] Failed to start dnsmasq: {stderr.decode('utf-8')}")
+            return False
         
         return True
     except Exception as e:
