@@ -169,10 +169,11 @@ def start_user_dnsmasq(user_id):
     """Start dnsmasq for a user"""
     user_dir = f'/sdcard/blserver/conf/users/{user_id}'
     config_file = f'{user_dir}/dnsmasq.conf'
+    pid_file = f'/sdcard/blserver/pids/dnsmasq-{user_id}.pid'
     
     try:
-        # Execute dnsmasq with su privileges
-        cmd = f"su -c \"dnsmasq --conf-file={config_file}\""
+        # Execute dnsmasq with su privileges and explicit pid-file option
+        cmd = f"su -c \"dnsmasq --conf-file={config_file} --pid-file={pid_file}\""
         subprocess.check_call(cmd, shell=True)
         print(f"[DNSMASQ] Started dnsmasq for user {user_id}")
         
