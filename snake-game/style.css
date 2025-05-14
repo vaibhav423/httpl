@@ -4,8 +4,25 @@
     box-sizing: border-box;
 }
 
+.background-pattern {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        linear-gradient(135deg, #1a1a2e, #16213e),
+        repeating-linear-gradient(
+            45deg,
+            rgba(255,255,255,0.03) 0px,
+            rgba(255,255,255,0.03) 1px,
+            transparent 1px,
+            transparent 10px
+        );
+    z-index: -1;
+}
+
 body {
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
     min-height: 100vh;
     display: flex;
     justify-content: center;
@@ -29,10 +46,20 @@ h1 {
     text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
 }
 
-.score-container {
-    font-size: 1.5rem;
+.score-board {
+    display: flex;
+    justify-content: space-around;
     margin-bottom: 1rem;
+}
+
+.score-container, .high-score {
+    font-size: 1.5rem;
     color: #fff;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 1rem;
+    min-width: 180px;
 }
 
 #gameCanvas {
@@ -50,9 +77,56 @@ h1 {
     margin-bottom: 1rem;
 }
 
+.control-keys {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.key-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.key {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #00ff88;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: #00ff88;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+}
+
 .instructions p {
     color: #ccc;
     margin-bottom: 1rem;
+}
+
+.tip {
+    color: #00ff88 !important;
+    font-style: italic;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.score-container, .high-score {
+    animation: pulse 2s infinite;
+    animation-play-state: paused;
+}
+
+.score-container.pulse, .high-score.pulse {
+    animation-play-state: running;
 }
 
 #startBtn {
