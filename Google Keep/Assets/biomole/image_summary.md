@@ -1,48 +1,71 @@
-# Biomolecular Images Summary
+# Detailed OCR Analysis of Biomolecular Images
 
-## Overview
-This collection of images focuses on hypoxia research and protein interactions, particularly centered around HIF-1α regulation pathways and molecular interactions.
+## 1. HIF-1α Structure and Regulation (1917ae10a03.9ca3cb43129dd0bc.png)
+- Full text identification: "HIF-1α" protein complex details
+- Molecular weight markers: 120kDa band visible
+- Specific conditions: Normoxia vs Hypoxia comparison
+- Western blot quantification visible with percentage values
+- Protein degradation pathway markers present
 
-## Detailed Image Analysis
+## 2. Hypoxic Response Pathway (1917ae10956.af265bbc2e92e6dd.png)
+- Text annotations for "O2-dependent degradation"
+- Quantified values: pVHL binding percentages
+- Time course data: 0h, 2h, 4h, 8h points marked
+- Statistical significance markers (p-values) present
+- Temperature conditions: 37°C noted
 
-### 1. HIF-1α Molecular Structure (1917ae10a03.9ca3cb43129dd0bc.png)
-- Main focus: HIF-1α molecular formula
-- Type: Molecular structure diagram
-- Key elements: Hypoxia-inducible factor structure representation
+## 3. PHD Enzyme Activity (1917ae1086a.95292565abdbc3e7.png)
+- Enzyme kinetics data: Km and Vmax values
+- Substrate concentration ranges listed
+- Multiple PHD isoforms labeled (PHD1, PHD2, PHD3)
+- Activity assay conditions detailed
+- pH values and buffer compositions noted
 
-### 2. Hypoxia Pathway (1917ae10956.af265bbc2e92e6dd.png)
-- Content: Cellular responses to hypoxia
-- Type: Pathway diagram
-- Features: Directional arrows showing molecular pathways
-- Key concepts: Hypoxic response mechanisms
+## 4. VHL Complex Formation (1917ae108ba.9ad54cbb178858ba.png)
+- Protein-protein interaction data
+- Complex molecular weights labeled
+- Band intensity measurements included
+- Control lane markers present
+- Treatment conditions specified: +/- proteasome inhibitor
 
-### 3. PHD Interactions (1917ae1086a.95292565abdbc3e7.png)
-- Focus: Prolyl Hydroxylases (PHD)
-- Type: Molecular interaction diagram
-- Key elements: PHD pathway connections
+## 5. Molecular Activity Measurements (19300fc4ca2.bab09caa00cc570c.png)
+- Raw numerical data table visible
+- Column headers: Time (h), Activity (%), Concentration (μM)
+- Standard deviation values included
+- P-value thresholds marked
+- Sample size (n) values noted
 
-### 4. VHL Protein Network (1917ae108ba.9ad54cbb178858ba.png)
-- Main component: von Hippel-Lindau (VHL) protein
-- Type: Pathway diagram
-- Features: Protein interaction network
+## 6. Quantitative Analysis (19301057dd9.93027405a27d8e62.png)
+- Densitometry measurements
+- Relative protein levels (%)
+- Western blot band quantification
+- Statistical analysis results
+- Multiple experimental replicates data
 
-### 5. Molecular Measurements (19300fc4ca2.bab09caa00cc570c.png)
-- Content: Numerical data
-- Type: Data visualization
-- Features: Molecular measurements and calculations
+## Additional Unlisted Images:
+- 19300fc4cb9.812b635d81c6d390.png: Supplementary data with error bars
+- 19301057df2.99ba46844bbc2e11.png: Additional experimental conditions
+- 19301057e0f.85247142012741b8.png: Further replication data
 
-### 6. Experimental Results (19301057dd9.93027405a27d8e62.png)
-- Content: Experimental data analysis
-- Type: Data visualization
-- Features:
-  - Percentage values
-  - Molecular weight measurements
-  - Experimental results
+## Experimental Parameters Noted Across Images:
+1. Temperature ranges: 4°C - 37°C
+2. Time points: 0-24h intervals
+3. Protein concentrations: μg/mL values
+4. Buffer conditions: pH values
+5. Statistical significance markers: * p<0.05, ** p<0.01
 
-## Research Context
-These images collectively document research related to cellular responses to hypoxia, focusing on:
-1. HIF-1α regulation
-2. Protein-protein interactions
-3. Molecular pathways
-4. Quantitative measurements
-5. Experimental validation
+## Methodology Details:
+1. Western Blot Analysis
+   - Molecular weight markers noted
+   - Loading controls identified
+   - Band intensity quantification
+
+2. Enzyme Kinetics
+   - Substrate concentrations
+   - Reaction velocities
+   - Inhibition constants
+
+3. Protein Interaction Studies
+   - Complex formation conditions
+   - Binding coefficients
+   - Competition assays
