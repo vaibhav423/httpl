@@ -5,6 +5,8 @@ class SnakeGame {
         this.startBtn = document.getElementById('startBtn');
         this.scoreElement = document.getElementById('score');
         this.highScoreElement = document.getElementById('highScore');
+        this.timerElement = document.getElementById('timer');
+        this.themeBtn = document.getElementById('themeBtn');
         this.particles = [];
         
         // Set canvas size
@@ -24,7 +26,27 @@ class SnakeGame {
         this.foodPulse = 0;
         
         this.highScoreElement.textContent = this.highScore;
+        // Timer properties
+        this.startTime = 0;
+        this.elapsedTime = 0;
+        this.timerInterval = null;
+        
         this.setupEventListeners();
+        this.setupThemeToggle();
+    }
+
+    setupThemeToggle() {
+        this.themeBtn.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('snakeGameTheme', newTheme);
+            this.themeBtn.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+        });
+
+        // Set initial button text
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        this.themeBtn.textContent = currentTheme === 'dark' ? '🌙' : '☀️';
     }
 
     setupEventListeners() {
@@ -32,8 +54,31 @@ class SnakeGame {
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
     }
 
+    formatTime(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    updateTimer() {
+        const currentTime = Date.now();
+        this.elapsedTime = currentTime - this.startTime;
+        this.timerElement.textContent = this.formatTime(this.elapsedTime);
+    }
+
     startGame() {
         // Reset game state
+        this.startTime = Date.now();
+        this.elapsedTime = 0;
+        this.timerElement.textContent = '00:00';
+        
+        // Clear previous timer if exists
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        
+        // Start timer
+        this.timerInterval = setInterval(() => this.updateTimer(), 1000);
+        
         this.snake = [
             { x: 5, y: 5 },
             { x: 4, y: 5 },
@@ -125,9 +170,63 @@ class SnakeGame {
             'right': 'left'
         };
 
+        // Remove active class from all keys
+        document.querySelectorAll('.key').forEach(key => key.classList.remove('active'));
+        
+        // Add active class to pressed key
+        const arrowMap = {
+            'up': '↑',
+            'down': '↓',
+            'left': '←',
+            'right': '→'
+        };
+        const keyElement = Array.from(document.querySelectorAll('.key')).find(
+            key => key.textContent === arrowMap[newDirection]
+        );
+        if (keyElement) {
+            keyElement.classList.add('active');
+            setTimeout(() => keyElement.classList.remove('active'), 150);
+        }
+
         if (opposites[newDirection] !== this.direction) {
             this.nextDirection = newDirection;
         }
+    }
+
+    setupEventListeners() {
+        this.startBtn.addEventListener('click', () => this.startGame());
+        document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+        
+        // Add touch/click events for arrow keys
+        document.querySelectorAll('.key').forEach(key => {
+            key.addEventListener('click', () => {
+                const directionMap = {
+                    '↑': 'ArrowUp',
+                    '↓': 'ArrowDown',
+                    '←': 'ArrowLeft',
+                    '→': 'ArrowRight'
+                };
+                const event = new KeyboardEvent('keydown', {
+                    key: directionMap[key.textContent]
+                });
+                this.handleKeyPress(event);
+            });
+
+            // Add touch events for mobile
+            key.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const directionMap = {
+                    '↑': 'ArrowUp',
+                    '↓': 'ArrowDown',
+                    '←': 'ArrowLeft',
+                    '→': 'ArrowRight'
+                };
+                const event = new KeyboardEvent('keydown', {
+                    key: directionMap[key.textContent]
+                });
+                this.handleKeyPress(event);
+            });
+        });
     }
 
     update() {
@@ -197,6 +296,7 @@ class SnakeGame {
 
     gameOver() {
         clearInterval(this.gameLoop);
+        clearInterval(this.timerInterval);
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
@@ -208,6 +308,7 @@ class SnakeGame {
         this.ctx.font = '20px Arial';
         this.ctx.fillStyle = '#fff';
         this.ctx.fillText(`Final Score: ${this.score}`, this.canvas.width/2 - 60, this.canvas.height/2 + 40);
+        this.ctx.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, this.canvas.width/2 - 60, this.canvas.height/2 + 70);
         
         this.startBtn.textContent = 'Play Again';
     }
@@ -223,22 +324,23 @@ class SnakeGame {
 
         // Draw snake
         this.snake.forEach((segment, index) => {
-            const gradient = this.ctx.createLinearGradient(
-                segment.x * this.gridSize,
-                segment.y * this.gridSize,
-                (segment.x + 1) * this.gridSize,
-                (segment.y + 1) * this.gridSize
-            );
-            
-            if (index === 0) {
-                // Head color
-                gradient.addColorStop(0, '#00ff88');
-                gradient.addColorStop(1, '#00cc6a');
-            } else {
-                // Body color
-                gradient.addColorStop(0, '#00cc6a');
-                gradient.addColorStop(1, '#009950');
-            }
+        const colors = getComputedStyle(document.documentElement);
+        const gradient = this.ctx.createLinearGradient(
+            segment.x * this.gridSize,
+            segment.y * this.gridSize,
+            (segment.x + 1) * this.gridSize,
+            (segment.y + 1) * this.gridSize
+        );
+        
+        if (index === 0) {
+            // Head color
+            gradient.addColorStop(0, colors.getPropertyValue('--snake-head').trim());
+            gradient.addColorStop(1, colors.getPropertyValue('--snake-body').trim());
+        } else {
+            // Body color
+            gradient.addColorStop(0, colors.getPropertyValue('--snake-body').trim());
+            gradient.addColorStop(1, colors.getPropertyValue('--accent-secondary').trim());
+        }
 
             this.ctx.fillStyle = gradient;
             this.ctx.fillRect(
@@ -261,8 +363,9 @@ class SnakeGame {
             (this.food.y + 0.5) * this.gridSize,
             (this.gridSize/2) * pulseSize
         );
-        foodGradient.addColorStop(0, '#ff4444');
-        foodGradient.addColorStop(1, '#cc0000');
+        const colors = getComputedStyle(document.documentElement);
+        foodGradient.addColorStop(0, colors.getPropertyValue('--food-primary').trim());
+        foodGradient.addColorStop(1, colors.getPropertyValue('--food-secondary').trim());
         
         this.ctx.fillStyle = foodGradient;
         this.ctx.beginPath();
@@ -277,7 +380,7 @@ class SnakeGame {
 
         // Draw food glow effect
         this.ctx.shadowBlur = 15;
-        this.ctx.shadowColor = '#ff4444';
+        this.ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--food-primary').trim();
         this.ctx.fill();
         this.ctx.shadowBlur = 0;
     }
